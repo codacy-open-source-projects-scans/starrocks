@@ -1,0 +1,541 @@
+
+
+
+
+-- name: test_change_partial_partition_distribution
+create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+) distributed by hash(k) buckets 10;
+-- result:
+-- !result
+insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
+-- result:
+-- !result
+alter table t partitions(p202006,p202008) distributed by hash(k) buckets 4;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+select * from t;
+-- result:
+1	2020-06-01
+2	2020-07-01
+3	2020-08-01
+-- !result
+alter table t partitions(p202006,p202008) distributed by hash(k1) buckets 4;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: not support change distribution column when specify partitions.')
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table t partitions(p202006,p202008) distributed by random;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: not support change distribution type when specify partitions.')
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+
+
+-- name: test_alter_key_buckets
+CREATE TABLE demo2_alter_0 (    
+    `user_name` VARCHAR(32) DEFAULT '',
+    `city_code` VARCHAR(100),
+    `from`  VARCHAR(32) DEFAULT '',
+    `pv` BIGINT DEFAULT '0'
+)
+PRIMARY KEY(`user_name`)
+DISTRIBUTED BY HASH(`user_name`) BUCKETS 5
+PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`user_name`) BUCKETS 10;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+
+
+-- name: test_online_optimize_table
+create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+) distributed by hash(k) buckets 10;
+-- result:
+-- !result
+insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table t distributed by hash(k);
+-- result:
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+select count(*) from t;
+-- result:
+63
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+select count(*) from t;
+-- result:
+63
+-- !result
+-- name: test_online_optimize_table_pk
+create table t(k int) primary key(k) distributed by hash(k) buckets 10;
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+alter table t distributed by hash(k);
+-- result:
+-- !result
+insert into t values(2);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(3);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(5);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(6);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(7);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(8);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(9);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(10);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(11);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(12);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(13);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(14);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(15);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(16);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(17);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(18);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(19);
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(20);
+-- result:
+-- !result
+select * from t;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+select * from t;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+-- !result
