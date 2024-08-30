@@ -155,7 +155,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     }
 
     private OlapTable checkAndGetTable(Database db, long tableId) throws AlterCancelException {
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             throw new AlterCancelException("table: " + tableId + " does not exist in database: " + db.getFullName());
         }
@@ -173,7 +173,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
 
         LOG.info("begin to send create temp partitions. job: {}", jobId);
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
@@ -240,7 +240,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         // must check if db or table still exist first.
         // or if table is dropped, the tasks will never be finished,
         // and the job will be in RUNNING state forever.
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
@@ -320,7 +320,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     protected void runRunningJob() throws AlterCancelException {
         Preconditions.checkState(jobState == JobState.RUNNING, jobState);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
@@ -333,6 +333,9 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
                         || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
                 progress += 100 / rewriteTasks.size();
+                if (this.progress < progress) {
+                    this.progress = progress;
+                }
                 continue;
             }
 
@@ -514,7 +517,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         Database db = null;
         Locker locker = new Locker();
         try {
-            db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 throw new AlterCancelException("database id:" + dbId + " does not exist");
             }
@@ -529,7 +532,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         }
 
         try {
-            Table table = db.getTable(tableId);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 throw new AlterCancelException("table:" + tableId + " does not exist in database:" + db.getFullName());
             }
@@ -577,7 +580,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
      * Should replay all changes before this job's state transfer to PENDING.
      */
     private void replayPending(OnlineOptimizeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
@@ -585,7 +588,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (tbl == null) {
                 // table may be dropped before replaying this log. just return
                 return;
@@ -608,7 +611,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
      * Should replay all changes in runPendingJob()
      */
     private void replayWaitingTxn(OnlineOptimizeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
@@ -617,7 +620,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            tbl = (OlapTable) db.getTable(tableId);
+            tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (tbl == null) {
                 // table may be dropped before replaying this log. just return
                 return;
@@ -674,12 +677,12 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
      * Should replay all changes in runRuningJob()
      */
     private void replayFinished(OnlineOptimizeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.WRITE);
             try {
-                OlapTable tbl = (OlapTable) db.getTable(tableId);
+                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 if (tbl != null) {
                     onReplayFinished(replayedJob, tbl);
                 }

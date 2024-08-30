@@ -351,6 +351,7 @@ set(EXEC_FILES
         ./storage/persistent_index_consistency_test.cpp
         ./storage/meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
+        ./runtime/agg_state_desc_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
         ./runtime/datetime_value_test.cpp
@@ -440,6 +441,7 @@ set(EXEC_FILES
         ./util/string_util_test.cpp
         ./util/tdigest_test.cpp
         ./util/thread_test.cpp
+        ./util/threadpool_test.cpp
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp

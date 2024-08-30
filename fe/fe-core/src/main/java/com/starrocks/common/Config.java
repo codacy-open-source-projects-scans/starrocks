@@ -100,6 +100,15 @@ public class Config extends ConfigBase {
 
     @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
     public static String sys_log_format = "plaintext";
+
+    @ConfField(comment = "Max length of a log line when using log4j json format," +
+            " truncate string values longer than this specified limit. Default: 1MB")
+    public static int sys_log_json_max_string_length = 1048576;
+
+    @ConfField(comment = "Max length of a profile log line when using log4j json format," +
+            " truncate string values longer than this specified limit. Default: 100MB")
+    public static int sys_log_json_profile_max_string_length = 104857600;
+
     /**
      * audit_log_dir:
      * This specifies FE audit log dir.
@@ -1264,6 +1273,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean ignore_materialized_view_error = false;
+
+    @ConfField(mutable = true, comment = "Whether to ignore task run history replay error in querying information_schema" +
+            ".task_runs")
+    public static boolean ignore_task_run_history_replay_error = false;
 
     /**
      * whether backup materialized views in backing databases. If not, will skip backing materialized views.
@@ -2955,8 +2968,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
     public static boolean enable_mv_query_context_cache = true;
 
-    @ConfField(mutable = true, comment = "Whether enable strict insert in mv refresh or not by default")
-    public static boolean enable_mv_refresh_insert_strict = false;
+    @ConfField(mutable = true, comment = "Mv refresh fails if there is filtered data, false by default")
+    public static boolean mv_refresh_fail_on_filter_data = false;
 
     @ConfField(mutable = true, comment = "The default timeout for planner optimize when refresh materialized view, 30s by " +
             "default")

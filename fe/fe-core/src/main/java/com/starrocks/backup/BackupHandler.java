@@ -86,9 +86,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -264,7 +262,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
 
         // check if db exist
         String dbName = stmt.getDbName();
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -321,7 +319,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             List<Table> backupTbls = Lists.newArrayList();
             for (TableRef tblRef : tblRefs) {
                 String tblName = tblRef.getName().getTbl();
-                Table tbl = db.getTable(tblName);
+                Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
                     return;
@@ -521,7 +519,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     public AbstractJob getAbstractJobByDbName(String dbName) throws DdlException {
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -685,18 +683,6 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
         }
         LOG.info("finished replay {} backup/store jobs from image", dbIdToBackupOrRestoreJob.size());
-    }
-
-    public long saveBackupHandler(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
-    }
-
-    public long loadBackupHandler(DataInputStream dis, long checksum, GlobalStateMgr globalStateMgr) throws IOException {
-        readFields(dis);
-        setGlobalStateMgr(globalStateMgr);
-        LOG.info("finished replay backupHandler from image");
-        return checksum;
     }
 
     public void saveBackupHandlerV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
