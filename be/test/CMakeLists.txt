@@ -44,6 +44,7 @@ set(EXEC_FILES
         ./exec/iceberg/iceberg_table_sink_operator_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
+        ./exec/workgroup/pipeline_executor_set_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
@@ -297,6 +298,7 @@ set(EXEC_FILES
         ./storage/rowset/index_page_test.cpp
         ./storage/rowset/metadata_cache_test.cpp
         ./storage/index/vector_index_test.cpp
+        ./storage/index/vector_search_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
         ./storage/storage_types_test.cpp

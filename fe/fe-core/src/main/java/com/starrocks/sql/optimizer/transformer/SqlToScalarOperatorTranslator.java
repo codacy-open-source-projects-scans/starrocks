@@ -191,6 +191,9 @@ public final class SqlToScalarOperatorTranslator {
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         result = scalarRewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
 
+        result = ScalarOperatorRewriter.replaceScalarOperatorByColumnRef(result,
+                                        expressionMapping.getGeneratedColumnExprOpToColumnRef());
+
         requireNonNull(result, "translated expression is null");
         return result;
     }
@@ -298,7 +301,8 @@ public final class SqlToScalarOperatorTranslator {
                     !expr.isConstant()) {
                 ScalarOperator res = Utils.getValueIfExists(expressionMapping.getExpressionToColumns(), expr);
                 if (res != null) {
-                    return res;
+                    ScalarOperator constantOperator = expressionMapping.getColumnRefToConstOperators().get(res);
+                    return constantOperator == null ? res : constantOperator;
                 }
             }
 
