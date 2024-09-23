@@ -828,6 +828,7 @@ public class OlapTable extends Table {
             }
             indexIdToMeta.put(newIdxId, indexIdToMeta.remove(entry.getKey()));
             indexIdToMeta.get(newIdxId).setIndexIdForRestore(newIdxId);
+            indexIdToMeta.get(newIdxId).setSchemaId(newIdxId);
             indexNameToId.put(entry.getValue(), newIdxId);
         }
 
@@ -1592,6 +1593,16 @@ public class OlapTable extends Table {
     @Override
     public Collection<Partition> getPartitions() {
         return idToPartition.values();
+    }
+
+    /**
+     * Return all visible partitions except shadow partitions.
+     */
+    public List<Partition> getVisiblePartitions() {
+        return nameToPartition.entrySet().stream()
+                .filter(e -> !e.getKey().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
+                .map(e -> e.getValue())
+                .collect(Collectors.toList());
     }
 
     public List<Partition> getNonEmptyPartitions() {

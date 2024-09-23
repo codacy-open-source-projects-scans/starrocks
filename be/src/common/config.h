@@ -282,8 +282,6 @@ CONF_mBool(enable_bitmap_index_memory_page_cache, "false");
 CONF_mBool(enable_zonemap_index_memory_page_cache, "false");
 // whether to enable the ordinal index memory cache
 CONF_mBool(enable_ordinal_index_memory_page_cache, "false");
-// whether to disable column pool
-CONF_Bool(disable_column_pool, "true");
 
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
@@ -703,6 +701,12 @@ CONF_Int32(metric_late_materialization_ratio, "1000");
 
 // Max batched bytes for each transmit request. (256KB)
 CONF_Int64(max_transmit_batched_bytes, "262144");
+// max chunk size for each tablet write request. (512MB)
+// see: https://github.com/StarRocks/starrocks/pull/50302
+// NOTE: If there are a large number of columns when loading,
+// a too small max_tablet_write_chunk_bytes may cause more frequent RPCs, which may affect performance.
+// In this case, we can try to increase the value to avoid the problem.
+CONF_mInt64(max_tablet_write_chunk_bytes, "536870912");
 
 CONF_Int16(bitmap_max_filter_items, "30");
 
@@ -921,6 +925,9 @@ CONF_String(aws_sdk_logging_trace_level, "trace");
 // This is critical for Hive partitioned tables. The object key usually contains '=' like 'dt=20230101'.
 // Enabling RFC-3986 encoding will make sure these characters are properly encoded.
 CONF_Bool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
+
+// use poco client to replace default curl client
+CONF_Bool(enable_poco_client_for_aws_sdk, "true");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
@@ -1345,6 +1352,9 @@ CONF_mDouble(json_flat_sparsity_factor, "0.9");
 
 // the maximum number of extracted JSON sub-field
 CONF_mInt32(json_flat_column_max, "100");
+
+// for whitelist on flat json remain data, max set 1kb
+CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
