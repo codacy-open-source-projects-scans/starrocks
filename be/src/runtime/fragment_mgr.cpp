@@ -309,10 +309,6 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         if (!runtime_state->tablet_fail_infos().empty()) {
             params.__set_failInfos(runtime_state->tablet_fail_infos());
         }
-
-        // Send new errors to coordinator
-        runtime_state->get_unreported_errors(&(params.error_log));
-        params.__isset.error_log = (params.error_log.size() > 0);
     }
 
     auto backend_id = get_backend_id();
@@ -875,7 +871,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             LOG(WARNING) << "tuple descriptor is null. id: " << slot_ref.tuple_id;
             return Status::InvalidArgument("tuple descriptor is null");
         }
-        auto* slot_desc = desc_tbl->get_slot_descriptor(slot_ref.slot_id);
+        auto* slot_desc = desc_tbl->get_slot_descriptor_with_column(slot_ref.slot_id);
         if (slot_desc == nullptr) {
             LOG(WARNING) << "slot descriptor is null. id: " << slot_ref.slot_id;
             return Status::InvalidArgument("slot descriptor is null");

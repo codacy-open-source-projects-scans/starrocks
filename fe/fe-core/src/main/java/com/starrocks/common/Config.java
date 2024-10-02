@@ -633,7 +633,7 @@ public class Config extends ConfigBase {
      * (Because most of the follower data has been damaged).
      */
     @ConfField
-    public static String bdbje_reset_election_group = "false";
+    public static boolean bdbje_reset_election_group = false;
 
     /**
      * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
@@ -2423,6 +2423,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
 
+    @ConfField(mutable = true, comment = "explain level of query plan in this detail")
+    public static String query_detail_explain_level = "COSTS";
+
     /**
      * StarRocks-manager pull queries every 1 second
      * metrics calculate query latency every 15 second
@@ -3248,4 +3251,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long slow_query_analyze_threshold = 5000;
+
+    // whether to print sql before parser
+    @ConfField(mutable = true)
+    public static boolean enable_print_sql = false;
 }

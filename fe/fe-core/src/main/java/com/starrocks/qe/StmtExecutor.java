@@ -788,6 +788,7 @@ public class StmtExecutor {
     public void processQueryScopeHint() throws DdlException {
         SessionVariable clonedSessionVariable = null;
         UUID queryId = context.getQueryId();
+        final TUniqueId executionId = context.getExecutionId();
         Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
         clonedUserVars.putAll(context.getUserVariables());
         boolean hasUserVariableHint = parsedStmt.getAllQueryScopeHints()
@@ -825,6 +826,7 @@ public class StmtExecutor {
                                 entry.getValue().deriveUserVariableExpressionResult(context);
                             } finally {
                                 context.setQueryId(queryId);
+                                context.setExecutionId(executionId);
                                 context.resetReturnRows();
                                 context.getState().reset();
                             }
@@ -1151,15 +1153,24 @@ public class StmtExecutor {
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (parsedStmt.isExplain()) {
-            String explainString = buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT);
+            String explainString = buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT,
+                    parsedStmt.getExplainLevel());
             if (executeInFe) {
                 explainString = "EXECUTE IN FE\n" + explainString;
             }
             handleExplainStmt(explainString);
             return;
         }
+
+        // Generate a query plan for query detail
+        // Explaining internal table is very quick, we prefer to use EXPLAIN COSTS
+        // But explaining external table is expensive, may need to access lots of metadata, so have to use EXPLAIN
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
+            StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(parsedStmt) ?
+                    StatementBase.ExplainLevel.defaultValue() :
+                    StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
+            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT,
+                    level));
         }
 
         List<PlanFragment> fragments = execPlan.getFragments();
@@ -1285,6 +1296,7 @@ public class StmtExecutor {
         }
     }
 
+    // TODO: move to DdlExecutor
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         TableName tableName = analyzeStmt.getTableName();
@@ -1342,10 +1354,12 @@ public class StmtExecutor {
         } catch (RejectedExecutionException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+            LOG.warn("analyze statement exceed concurrency limit {}", analyzeStmt.toString(), e);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         } catch (ExecutionException | InterruptedException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-            analyzeStatus.setReason("The statistics tasks running failed");
+            analyzeStatus.setReason("analyze failed due to " + e.getMessage());
+            LOG.warn("analyze statement failed {}", analyzeStmt.toString(), e);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         } finally {
             context.getSessionVariable().setQueryTimeoutS(timeout);
@@ -1775,7 +1789,8 @@ public class StmtExecutor {
         context.getState().setEof();
     }
 
-    private String buildExplainString(ExecPlan execPlan, ResourceGroupClassifier.QueryType queryType) {
+    private String buildExplainString(ExecPlan execPlan, ResourceGroupClassifier.QueryType queryType,
+                                      StatementBase.ExplainLevel explainLevel) {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             TWorkGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
@@ -1803,7 +1818,7 @@ public class StmtExecutor {
                 if (optimizedRecord != null) {
                     explainString += optimizedRecord.getExplainString();
                 }
-                explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+                explainString += execPlan.getExplainString(explainLevel);
             }
         }
         return explainString;
@@ -2081,11 +2096,17 @@ public class StmtExecutor {
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (stmt.isExplain()) {
-            handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
+            handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT,
+                    parsedStmt.getExplainLevel()));
             return;
         }
+
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
+            StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(parsedStmt) ?
+                    StatementBase.ExplainLevel.defaultValue() :
+                    StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
+            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT,
+                    level));
         }
 
         // special handling for delete of non-primary key table, using old handler

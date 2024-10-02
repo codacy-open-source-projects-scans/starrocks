@@ -91,11 +91,15 @@ option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 option(USE_SSE4_2 "Build with SSE4.2 instruction" ON)
 
+option(USE_BMI_2 "Build with BMI2 instruction" ON)
+
 option(USE_AVX2 "Build with AVX2 instruction" ON)
 
 option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
 option(WITH_TENANN "Build with TENANN" OFF)
+
+option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
 # Only support tenann on x86
 if (${WITH_TENANN} STREQUAL "ON" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
@@ -597,7 +601,9 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-p
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} ${FILE_PREFIX_MAP_FLAG}")
+if("${WITH_RELATIVE_SRC_PATH}" STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} ${FILE_PREFIX_MAP_FLAG}")
+endif()
 # disable link delete(void*, long)
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-sized-deallocation")
 
@@ -664,6 +670,9 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         # the compiler will define __AVX2__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx2")
     endif()
+    if (${USE_BMI_2})
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mbmi2")
+    endif()
     if (${USE_AVX512})
         # the compiler will define __AVX512F__ __AVX512BW__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw")
@@ -705,6 +714,16 @@ endif()
 if (ENABLE_FAULT_INJECTION)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DFIU_ENABLE")
     message(STATUS "enable fault injection")
+endif()
+
+option(ASSERT_STATUS_CHECKED "build with assert status checked" OFF)
+if (ASSERT_STATUS_CHECKED)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_ASSERT_STATUS_CHECKED")
+endif()
+
+if (BUILD_FORMAT_LIB)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fPIC -DBUILD_FORMAT_LIB")
+    message(STATUS "enable build format library")
 endif()
 
 # For CMAKE_BUILD_TYPE=Debug
@@ -754,8 +773,10 @@ endif()
 
 # Add flags that are common across build types
 SET(CMAKE_CXX_FLAGS "${CXX_COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
-# apply -ffile-prefix-map option to .c source files as well
-SET(CMAKE_C_FLAGS "${FILE_PREFIX_MAP_FLAG} ${CMAKE_C_FLAGS}")
+if("${WITH_RELATIVE_SRC_PATH}" STREQUAL "ON")
+    # apply -ffile-prefix-map option to .c source files as well
+    SET(CMAKE_C_FLAGS "${FILE_PREFIX_MAP_FLAG} ${CMAKE_C_FLAGS}")
+endif()
 
 message(STATUS "Compiler Flags: ${CMAKE_CXX_FLAGS}")
 
@@ -827,7 +848,6 @@ set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
 
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-    hdfs
     jvm
 )
 set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
@@ -950,29 +970,34 @@ if (${WITH_TENANN} STREQUAL "ON")
 endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
-set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES})
 
+set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
+    ${STARROCKS_LINK_LIBS}
+    ${STARROCKS_DEPENDENCIES}
+    hdfs
+)
 set(BUILD_FOR_SANITIZE "OFF")
+
 # Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
     message("use jemalloc")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
+    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
+        set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libsan)
     else()
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+        set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libasan)
     endif()
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
-    set(BUILD_FOR_SANITIZE "ON")
+    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-liblsan)
+     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
     message("use jemalloc")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
+    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libubsan jemalloc)
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
+    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libtsan)
     set(BUILD_FOR_SANITIZE "ON")
 else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
@@ -1024,9 +1049,15 @@ if (${MAKE_TEST} STREQUAL "ON")
     add_definitions(-DBE_TEST)
     add_definitions(-DFIU_ENABLE)
 else()
-    # output *.a, *.so, *.dylib to output/tmp
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
+    if (BUILD_FORMAT_LIB)
+        # output *.a, *.so, *.dylib to output/format-lib-tmp
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
+        set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
+    else()
+        # output *.a, *.so, *.dylib to output/tmp
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
+        set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
+    endif ()
     # output *.exe to output/lib
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OUTPUT_DIR}/lib)
 endif ()
@@ -1060,7 +1091,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
-    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
+    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${TEST_LINK_LIBS})
 
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
@@ -1096,8 +1127,13 @@ add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
 add_subdirectory(${SRC_DIR}/script)
 
+if (BUILD_FORMAT_LIB)
+    message(STATUS "Build starrocks format lib")
+    add_subdirectory(${SRC_DIR}/starrocks_format)
+endif()
+
 if (WITH_BENCH STREQUAL "ON")
-     message(STATUS "Build binary with bench")
+    message(STATUS "Build binary with bench")
     add_subdirectory(${SRC_DIR}/bench)
 endif()
 

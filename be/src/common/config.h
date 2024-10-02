@@ -80,6 +80,11 @@ CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
 // it will be set to physical memory size.
 CONF_String(mem_limit, "90%");
 
+// Enable the jemalloc tracker, which is responsible for reserving memory
+CONF_Bool(enable_jemalloc_memory_tracker, "true");
+// Consider part of jemalloc memory as fragmentation: ratio * (RSS-allocated-metadata)
+CONF_mDouble(jemalloc_fragmentation_ratio, "0.3");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
@@ -158,6 +163,13 @@ CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
 CONF_mInt32(replication_threads, "0");
+// The replication max speed limit(KB/s).
+CONF_mInt32(replication_max_speed_limit_kbps, "50000");
+// The replication min speed limit(KB/s).
+CONF_mInt32(replication_min_speed_limit_kbps, "50");
+// The replication min speed time(seconds).
+CONF_mInt32(replication_min_speed_time_seconds, "300");
+// Clear expired replication snapshots interval
 CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 
 // The log dir.
@@ -471,7 +483,7 @@ CONF_Bool(use_mmap_allocate_chunk, "false");
 // Chunk Allocator's reserved bytes limit,
 // Default value is 2GB, increase this variable can improve performance, but will
 // acquire more free memory which can not be used by other modules
-CONF_Int64(chunk_reserved_bytes_limit, "2147483648");
+CONF_Int64(chunk_reserved_bytes_limit, "0");
 
 // for pprof
 CONF_String(pprof_profile_dir, "${STARROCKS_HOME}/log");
@@ -857,6 +869,11 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 // Request timeout for object storage specialized for rename_file operation.
 // if this parameter is 0, use object_storage_request_timeout_ms instead.
 CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
+
+// Retry strategy for read operation. The following two parameters are the default value of Aws
+// DefaultRetryStrategy
+CONF_Int64(object_storage_max_retries, "10");
+CONF_Int64(object_storage_retry_scale_factor, "25");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
@@ -1459,5 +1476,7 @@ CONF_mInt32(thrift_max_recursion_depth, "64");
 CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
+
+CONF_mBool(enable_bit_unpack_simd, "true");
 
 } // namespace starrocks::config

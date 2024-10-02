@@ -202,6 +202,10 @@ Status GlobalEnv::_init_mem_tracker() {
     }
 
     _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
+    _jemalloc_metadata_tracker =
+            regist_tracker(MemTracker::JEMALLOC, -1, "jemalloc_metadata", _process_mem_tracker.get());
+    _jemalloc_fragmentation_tracker =
+            regist_tracker(MemTracker::JEMALLOC, -1, "jemalloc_fragmentation", _process_mem_tracker.get());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
@@ -507,8 +511,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         exit(-1);
     }
 
-#if defined(USE_STAROS) && !defined(BE_TEST)
-    _lake_location_provider = new lake::StarletLocationProvider();
+#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
+    _lake_location_provider = std::make_shared<lake::StarletLocationProvider>();
     _lake_update_manager =
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
@@ -524,7 +528,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
 
 #elif defined(BE_TEST)
-    _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
+    _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
     _lake_update_manager =
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
@@ -701,7 +705,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
-    SAFE_DELETE(_lake_location_provider);
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
