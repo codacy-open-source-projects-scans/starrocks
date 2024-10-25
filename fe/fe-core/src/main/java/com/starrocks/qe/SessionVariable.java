@@ -534,6 +534,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
     public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE = "enable_materialized_view_agg_pushdown_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE =
+            "enable_materialized_view_timeseries_agg_pushdown_rewrite";
 
     public static final String ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE =
             "enable_materialized_view_text_match_rewrite";
@@ -716,6 +718,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String WAREHOUSE_NAME = "warehouse";
 
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
+
+    public static final String HDFS_BACKEND_SELECTOR_FORCE_REBALANCE = "hdfs_backend_selector_force_rebalance";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
@@ -1545,6 +1549,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_HASH_ALGORITHM, flag = VariableMgr.INVISIBLE)
     private String hdfsBackendSelectorHashAlgorithm = "consistent";
 
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_FORCE_REBALANCE, flag = VariableMgr.INVISIBLE)
+    private boolean hdfsBackendSelectorForceRebalance = false;
+
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 256;
 
@@ -1842,6 +1849,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE)
     private boolean enableMaterializedViewPushDownRewrite = false;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE)
+    private boolean enableMaterializedViewTimeSeriesPushDownRewrite = true;
 
     @VarAttr(name = ENABLE_FORCE_RULE_BASED_MV_REWRITE)
     private boolean enableForceRuleBasedMvRewrite = true;
@@ -2721,6 +2731,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setHdfsBackendSelectorHashAlgorithm(String hdfsBackendSelectorHashAlgorithm) {
         this.hdfsBackendSelectorHashAlgorithm = hdfsBackendSelectorHashAlgorithm;
+    }
+
+    public boolean getHdfsBackendSelectorForceRebalance() {
+        return hdfsBackendSelectorForceRebalance;
+    }
+
+    public void setHdfsBackendSelectorForceRebalance(boolean hdfsBackendSelectorForceRebalance) {
+        this.hdfsBackendSelectorForceRebalance = hdfsBackendSelectorForceRebalance;
     }
 
     public int getConsistentHashVirtualNodeNum() {
@@ -3663,6 +3681,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewPushDownRewrite(boolean enableMaterializedViewPushDownRewrite) {
         this.enableMaterializedViewPushDownRewrite = enableMaterializedViewPushDownRewrite;
+    }
+
+    public boolean isEnableMaterializedViewTimeSeriesPushDownRewrite() {
+        return enableMaterializedViewTimeSeriesPushDownRewrite;
+    }
+
+    public void setEnableMaterializedViewTimeSeriesPushDownRewrite(boolean enableMaterializedViewTimeSeriesPushDownRewrite) {
+        this.enableMaterializedViewTimeSeriesPushDownRewrite = enableMaterializedViewTimeSeriesPushDownRewrite;
     }
 
     public boolean isEnableMaterializedViewViewDeltaRewrite() {

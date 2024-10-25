@@ -57,7 +57,9 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
         }
     });
 
-    int child_num = expr->get_num_children();
+    // for the lambda function, we only consider extracting the outer common expression from the lambda expr,
+    // not its arguments
+    int child_num = expr->is_lambda_function() ? 1 : expr->get_num_children();
     std::vector<SlotId> slot_ids;
 
     for (int i = 0; i < child_num; i++) {
@@ -79,7 +81,7 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
         if (is_independent) {
             SlotId slot_id = ctx->next_slot_id++;
             ColumnRef* column_ref = state->obj_pool()->add(new ColumnRef(child->type(), slot_id));
-            VLOG(1) << "add new common expr, slot_id: " << slot_id << ", new expr: " << column_ref->debug_string()
+            VLOG(2) << "add new common expr, slot_id: " << slot_id << ", new expr: " << column_ref->debug_string()
                     << ", old expr: " << child->debug_string();
             expr->_children[i] = column_ref;
             ctx->outer_common_exprs.insert({slot_id, child});

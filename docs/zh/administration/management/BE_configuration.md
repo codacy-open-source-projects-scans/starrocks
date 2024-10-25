@@ -598,49 +598,41 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<!--
 ##### upload_worker_count
 
-- 默认值：1
+- 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：BE 节点上传任务的最大线程数，用于备份作业。`0` 表示设置线程数为 BE 所在机器的 CPU 核数。
 - 引入版本：-
--->
 
-<!--
 ##### download_worker_count
 
-- 默认值：1
+- 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：BE 节点下载任务的最大线程数，用于恢复作业。`0` 表示设置线程数为 BE 所在机器的 CPU 核数。
 - 引入版本：-
--->
 
-<!--
 ##### make_snapshot_worker_count
 
 - 默认值：5
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：
+- 描述：BE 节点快照任务的最大线程数。
 - 引入版本：-
--->
 
-<!--
 ##### release_snapshot_worker_count
 
 - 默认值：5
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：BE 节点释放快照任务的最大线程数。
 - 引入版本：-
--->
 
 ##### max_download_speed_kbps
 
@@ -1127,7 +1119,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 `-1` 代表没有限制。`0` 表示禁用 Compaction。
+- 描述：Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 `-1` 代表没有限制。`0` 表示禁用 Compaction。开启 Event-based Compaction Framework 时，该参数才支持动态设置。
 - 引入版本：-
 
 ##### compaction_trace_threshold
