@@ -115,6 +115,16 @@ public class PlanTestNoneDBBase {
         }
     }
 
+    public static void assertContainsAny(String text, String... pattern) {
+        boolean contains = false;
+        for (String s : pattern) {
+            contains |= text.contains(s);
+        }
+        if (!contains) {
+            Assert.fail(text);
+        }
+    }
+
     private static final String NORMAL_PLAN_PREDICATE_PREFIX = "PREDICATES:";
     private static final String LOWER_NORMAL_PLAN_PREDICATE_PREFIX = "predicates:";
     private static final String LOGICAL_PLAN_SCAN_PREFIX = "SCAN ";
@@ -245,14 +255,14 @@ public class PlanTestNoneDBBase {
 
     public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(rowCount);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
         }
     }
 
     public static void setPartitionStatistics(OlapTable table, String partitionName, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             if (partition.getName().equals(partitionName)) {
-                partition.getBaseIndex().setRowCount(rowCount);
+                partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
             }
         }
     }
@@ -880,7 +890,7 @@ public class PlanTestNoneDBBase {
         String sql = getFileContent(fileName);
         List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
         for (StatementBase stmt : statements) {
-            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, stmt);
+            StmtExecutor stmtExecutor = StmtExecutor.newInternalExecutor(connectContext, stmt);
             stmtExecutor.execute();
             Assert.assertEquals("", connectContext.getState().getErrorMessage());
         }

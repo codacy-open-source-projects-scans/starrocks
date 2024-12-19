@@ -35,6 +35,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
@@ -56,7 +57,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -133,6 +133,9 @@ public class QueryAnalyzer {
         }
 
         public Void process(ParseNode node, Scope scope) {
+            if (session.getSessionVariable().isDisableGeneratedColumnRewrite()) {
+                return null;
+            }
             return node.accept(this, scope);
         }
 
@@ -657,10 +660,10 @@ public class QueryAnalyzer {
 
                 if (table.isHiveTable()) {
                     HiveTable hiveTable = (HiveTable) table;
-                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
-                            hiveTable.getTableName());
+                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getCatalogDBName(),
+                            hiveTable.getCatalogTableName());
                     HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
-                            hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                            hiveTable.getResourceName(), hiveTable.getCatalogDBName(), hiveTable.getCatalogTableName());
                     hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
                     hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
                     Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
@@ -1406,7 +1409,7 @@ public class QueryAnalyzer {
                         Preconditions.checkState(mvTable != null);
                         Preconditions.checkState(mvTable instanceof OlapTable);
                         // Add read lock to avoid concurrent problems.
-                        OlapTable mvOlapTable = new OlapTable();
+                        OlapTable mvOlapTable = new OlapTable(mvTable.getType());
                         ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
                         mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
@@ -1452,6 +1455,10 @@ public class QueryAnalyzer {
                         }
                     }
                 }
+            }
+
+            if (table instanceof OlapTable) {
+                ((OlapTable) table).maySetDatabaseName(db.getFullName());
             }
 
             return table;

@@ -44,10 +44,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
@@ -77,6 +79,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -339,18 +342,16 @@ public class TransactionState implements Writable {
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
+    private List<String> createdPartitionNames = Lists.newArrayList();
+
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            txnLock.writeLock().lock();
-        }
+        txnLock.writeLock().lock();
     }
 
     public void writeUnlock() {
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            txnLock.writeLock().unlock();
-        }
+        txnLock.writeLock().unlock();
     }
 
     public TransactionState() {
@@ -422,6 +423,35 @@ public class TransactionState implements Writable {
     public void setTabletCommitInfos(List<TabletCommitInfo> infos) {
         this.tabletCommitInfos = Sets.newHashSet();
         this.tabletCommitInfos.addAll(infos);
+    }
+
+
+    public boolean checkReplicaNeedSkip(Tablet tablet, Replica replica, PartitionCommitInfo partitionCommitInfo) {
+        boolean isContain = tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(), replica.getState());
+        if (isContain) {
+            return false;
+        }
+
+        // In order for the transaction to complete in time for this scenario: the server machine is not recovered.
+        // 1. Transaction TA writes to a two-replicas tablet and enters the committed state.
+        //    The tablet's repliace are replicaA, replicaB.
+        // 2. replicaA, replicaB generate tasks: PublishVersionTaskA, PublishVersionTaskB.
+        //    PublishVersionTaskA/PublishVersionTaskB successfully submitted to the beA/beB via RPC.
+        // 3. The machine where beB is located hangs and is not recoverable.
+        //   Therefore PublishVersionTaskA is finished,PublishVersionTaskB is unfinished.
+        // 4. FE clone replicaC from replicaA, BE report replicaC info.
+        //    So transactions must rely on replicaA and replicaC to accomplish visible state.
+        if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
+            return false;
+        }
+
+        return true;
+    }
+  
+    public void resetTabletCommitInfos() {
+        // With a high streamload frequency and too many tablets involved,
+        // TabletCommitInfos will take up too much memory.
+        tabletCommitInfos = null;
     }
 
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
@@ -613,7 +643,7 @@ public class TransactionState implements Writable {
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
                                     TxnStateChangeCallback callback,
                                     String txnStatusChangeReason)
-            throws UserException {
+            throws StarRocksException {
         // after status changed
         if (callback != null) {
             switch (transactionStatus) {
@@ -876,7 +906,8 @@ public class TransactionState implements Writable {
         if (publishBackends.isEmpty()) {
             // note: tasks are sent to all backends including dead ones, or else
             // transaction manager will treat it as success
-            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+            List<Long> allBackends =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (!allBackends.isEmpty()) {
                 publishBackends = Sets.newHashSet();
                 publishBackends.addAll(allBackends);
@@ -894,7 +925,7 @@ public class TransactionState implements Writable {
 
         List<TPartitionVersionInfo> partitionVersions = new ArrayList<>(partitionCommitInfos.size());
         for (PartitionCommitInfo commitInfo : partitionCommitInfos) {
-            TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPartitionId(),
+            TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPhysicalPartitionId(),
                     commitInfo.getVersion(), 0);
             if (commitInfo.isDoubleWrite()) {
                 version.setIs_double_write(true);
@@ -1035,7 +1066,22 @@ public class TransactionState implements Writable {
         return tabletIdToTTabletLocation;
     }
 
+    public List<String> getCreatedPartitionNames() {
+        writeLock();
+        try {
+            return createdPartitionNames;
+        } finally {
+            writeUnlock();
+        }
+    }
+
     public void clearAutomaticPartitionSnapshot() {
+        writeLock();
+        try {
+            createdPartitionNames = partitionNameToTPartition.keySet().stream().collect(Collectors.toList());
+        } finally {
+            writeUnlock();
+        }
         partitionNameToTPartition.clear();
         tabletIdToTTabletLocation.clear();
     }

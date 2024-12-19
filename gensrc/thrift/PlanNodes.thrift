@@ -244,7 +244,7 @@ struct TBrokerScanRangeParams {
     // If multi_row_delimiter is set, row_delimiter will ignore.
     12: optional string multi_row_delimiter;
     // If non_blocking_read is set, stream_load_pipe will not block while performing read io
-    13: optional bool non_blocking_read;
+    13: optional bool non_blocking_read; // deprecated
     // If use_broker is set, we will read hdfs thourgh broker
     // If use_broker is not set, we will read through libhdfs/S3 directly
     14: optional bool use_broker
@@ -280,6 +280,10 @@ struct TBrokerScanRange {
     3: required list<Types.TNetworkAddress> broker_addresses
     // used for channel stream load only
     4: optional i32 channel_id
+    // available when this is a stream load in batch write mode
+    5: optional bool enable_batch_write
+    6: optional i32 batch_write_interval_ms
+    7: optional map<string, string> batch_write_parameters;
 }
 
 // Es scan range
@@ -309,6 +313,15 @@ struct TPaimonDeletionFile {
     1: optional string path
     2: optional i64 offset
     3: optional i64 length
+}
+
+// refer to https://github.com/delta-io/delta/blob/master/PROTOCOL.md#deletion-vector-descriptor-schema
+struct TDeletionVectorDescriptor {
+  1: optional string storageType
+  2: optional string pathOrInlineDv
+  3: optional i64 offset
+  4: optional i64 sizeInBytes
+  5: optional i64 cardinality
 }
 
 // Hdfs scan range
@@ -397,6 +410,8 @@ struct THdfsScanRange {
     29: optional Descriptors.THdfsPartition partition_value;
 
     30: optional Types.TTableId table_id;
+
+    31:optional TDeletionVectorDescriptor deletion_vector_descriptor
 }
 
 struct TBinlogScanRange {
@@ -545,6 +560,19 @@ struct TVectorSearchOptions {
   10: optional double k_factor;
 }
 
+enum SampleMethod {
+  BY_BLOCK,
+  BY_PAGE,
+}
+
+struct TTableSampleOptions {
+  1: optional bool enable_sampling;
+  2: optional SampleMethod sample_method;
+  3: optional i64 random_seed;
+  4: optional i64 probability_percent;
+    
+}
+
 // If you find yourself changing this struct, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
@@ -577,6 +605,7 @@ struct TOlapScanNode {
   37: optional i64 schema_id
 
   40: optional TVectorSearchOptions vector_search_options
+  41: optional TTableSampleOptions sample_options;
 }
 
 struct TJDBCScanNode {
@@ -882,6 +911,9 @@ struct TSortNode {
   29: optional bool late_materialization;
   30: optional bool enable_parallel_merge;
   31: optional bool analytic_partition_skewed;
+  32: optional list<Exprs.TExpr> pre_agg_exprs;
+  33: optional list<Types.TSlotId> pre_agg_output_slot_id;
+  34: optional bool pre_agg_insert_local_shuffle;
 }
 
 enum TAnalyticWindowType {
@@ -1146,6 +1178,11 @@ struct TProjectNode {
     2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
 }
 
+struct TSelectNode {
+     // used for common expressions compute result reuse
+    1: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+}
+
 struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
@@ -1308,6 +1345,8 @@ struct TPlanNode {
   70: optional TStreamScanNode stream_scan_node;
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
+
+  81: optional TSelectNode select_node; 
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

@@ -27,9 +27,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.load.batchwrite.BatchWriteMgr;
+import com.starrocks.load.batchwrite.RequestLoadResult;
+import com.starrocks.load.batchwrite.TableId;
+import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -63,6 +68,8 @@ import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
+import com.starrocks.thrift.TMergeCommitRequest;
+import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -100,6 +107,11 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
@@ -1129,7 +1141,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testSetFrontendConfig() throws TException {
+    public void testSetFrontendConfig() throws Exception {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TSetConfigRequest request = new TSetConfigRequest();
         request.keys = Lists.newArrayList("mysql_server_version");
@@ -1137,10 +1149,19 @@ public class FrontendServiceImplTest {
 
         TSetConfigResponse result = impl.setConfig(request);
         Assert.assertEquals("5.1.1", GlobalVariable.version);
+
+        request.keys = Lists.newArrayList("adaptive_choose_instances_threshold");
+        request.values = Lists.newArrayList("98");
+        impl.setConfig(request);
+
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
+        List<List<String>> configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("98", configs.get(0).get(2));
+        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
     }
 
     @Test
-    public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException, LockTimeoutException {
+    public void testLoadTxnCommitRateLimitExceeded() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1156,7 +1177,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitTimeout() throws UserException, TException, LockTimeoutException {
+    public void testLoadTxnCommitTimeout() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1170,7 +1191,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitFailed() throws UserException, TException, LockTimeoutException {
+    public void testLoadTxnCommitFailed() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1178,13 +1199,13 @@ public class FrontendServiceImplTest {
         request.txnId = 1001L;
         request.setAuth_code(100);
         request.commitInfos = new ArrayList<>();
-        doThrow(new UserException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
+        doThrow(new StarRocksException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
         TLoadTxnCommitResult result = impl.loadTxnCommit(request);
         Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
     }
 
     @Test
-    public void testStreamLoadPutTimeout() throws UserException, TException, LockTimeoutException {
+    public void testStreamLoadPutTimeout() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.db = "test";
@@ -1197,7 +1218,46 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testMetaNotFound() throws UserException {
+    public void testRequestBatchWrite() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TMergeCommitRequest request = new TMergeCommitRequest();
+        request.setDb("test");
+        request.setTbl("site_access_hour");
+        request.setUser("root");
+        request.setPasswd("");
+        request.setBackend_id(10001);
+        request.setBackend_host("127.0.0.1");
+        request.putToParams(HTTP_ENABLE_BATCH_WRITE, "true");
+        request.putToParams(HTTP_BATCH_WRITE_ASYNC, "true");
+        request.putToParams(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+        request.putToParams(HTTP_BATCH_WRITE_PARALLEL, "4");
+
+        new MockUp<BatchWriteMgr>() {
+
+            @Mock
+            public RequestLoadResult requestLoad(
+                    TableId tableId, StreamLoadKvParams params, long backendId, String backendHost) {
+                return new RequestLoadResult(new TStatus(TStatusCode.OK), "test_label");
+            }
+        };
+
+        // test success request
+        {
+            TMergeCommitResult result = impl.requestMergeCommit(request);
+            assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            assertEquals("test_label", result.getLabel());
+        }
+
+        // test authentication failure
+        {
+            request.setUser("fake_user");
+            TMergeCommitResult result = impl.requestMergeCommit(request);
+            assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testMetaNotFound() throws StarRocksException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.db = "test";
@@ -1206,20 +1266,20 @@ public class FrontendServiceImplTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setLoadId(new TUniqueId(1, 2));
 
-        Exception e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Exception e = Assert.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
         Assert.assertTrue(e.getMessage().contains("unknown table"));
 
         request.tbl = "v";
-        e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        e = Assert.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
         Assert.assertTrue(e.getMessage().contains("load table type is not OlapTable"));
 
         request.tbl = "mv";
-        e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        e = Assert.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
         Assert.assertTrue(e.getMessage().contains("is a materialized view"));
     }
 
     @Test
-    public void testAddListPartitionConcurrency() throws UserException, TException {
+    public void testAddListPartitionConcurrency() throws StarRocksException, TException {
         new MockUp<GlobalTransactionMgr>() {
             @Mock
             public TransactionState getTransactionState(long dbId, long transactionId) {

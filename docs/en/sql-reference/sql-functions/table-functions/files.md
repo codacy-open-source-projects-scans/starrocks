@@ -19,6 +19,7 @@ Currently, the FILES() function supports the following data sources and file for
   - Google Cloud Storage
   - Other S3-compatible storage system
   - Microsoft Azure Blob Storage
+  - NFS(NAS)
 - **File formats:**
   - Parquet
   - ORC
@@ -90,6 +91,19 @@ The URI used to access the files. You can specify a path or a file.
     -- Example: "path" = "wasbs://testcontainer@testaccount.blob.core.windows.net/path/file.parquet"
     ```
 
+- To access NFS(NAS):
+
+  ```SQL
+  "path" = "file:///<absolute_path>"
+  -- Example: "path" = "file:///home/ubuntu/parquetfile/file.parquet"
+  ```
+
+  :::note
+
+  To access the files in NFS via the `file://` protocol, you need to mount a NAS device as NFS under the same directory of each BE or CN node.
+
+  :::
+
 #### data_format
 
 The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
@@ -129,10 +143,11 @@ If a field value contains an `enclose`-specified character, you can use the same
 
 ###### csv.skip_header
 
-Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.
+Specifies the number of header rows to skip in the CSV-formatted data. Type: INTEGER. Default value: `0`.
 
-In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
-The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement.
+In some CSV-formatted data files, a number of header rows are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip these header rows. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
+
+The header rows in the data file must be separated by using the row separator that you specify in the load statement.
 
 ###### csv.escape
 
@@ -447,6 +462,15 @@ SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
+Query the data from the Parquet files in NFS(NAS):
+
+```SQL
+SELECT * FROM FILES(
+  'path' = 'file:///home/ubuntu/parquetfile/*.parquet', 
+  'format' = 'parquet'
+);
+```
+
 #### Example 2: Insert the data rows from a file
 
 Insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
@@ -462,6 +486,18 @@ INSERT INTO insert_wiki_edit
 );
 Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
+```
+
+Insert the data rows from the CSV files in NFS(NAS) into the table `insert_wiki_edit`:
+
+```SQL
+INSERT INTO insert_wiki_edit
+  SELECT * FROM FILES(
+    'path' = 'file:///home/ubuntu/csvfile/*.csv', 
+    'format' = 'csv', 
+    'csv.column_separator' = ',', 
+    'csv.row_delimiter' = '\n'
+  );
 ```
 
 #### Example 3: CTAS with data rows from a file
@@ -656,8 +692,7 @@ DESC FILES(
 Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
 
 ```SQL
-INSERT INTO 
-FILES(
+INSERT INTO FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
     "hadoop.security.authentication" = "simple",
@@ -665,6 +700,26 @@ FILES(
     "password" = "xxxxx",
     "compression" = "lz4",
     "partition_by" = "sales_time"
+)
+SELECT * FROM sales_records;
+```
+
+Unload the query results into CSV and Parquet files in NFS(NAS):
+
+```SQL
+-- CSV
+INSERT INTO FILES(
+    'path' = 'file:///home/ubuntu/csvfile/', 
+    'format' = 'csv', 
+    'csv.column_separator' = ',', 
+    'csv.row_delimitor' = '\n'
+)
+SELECT * FROM sales_records;
+
+-- Parquet
+INSERT INTO FILES(
+    'path' = 'file:///home/ubuntu/parquetfile/',
+    'format' = 'parquet'
 )
 SELECT * FROM sales_records;
 ```

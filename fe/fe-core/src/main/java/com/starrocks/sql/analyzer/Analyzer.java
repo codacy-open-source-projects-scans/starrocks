@@ -151,6 +151,10 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -341,7 +345,7 @@ public class Analyzer {
                 taskStmt = queryStatement;
             } else if (statement.getInsertStmt() != null) {
                 InsertStmt insertStmt = statement.getInsertStmt();
-                InsertAnalyzer.analyze(insertStmt, context);
+                Analyzer.analyze(insertStmt, context);
                 taskStmt = insertStmt;
             } else if (statement.getDataCacheSelectStmt() != null) {
                 DataCacheStmtAnalyzer.analyze(statement.getDataCacheSelectStmt(), context);
@@ -392,12 +396,6 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitInsertStatement(InsertStmt statement, ConnectContext session) {
-            InsertAnalyzer.analyze(statement, session);
-            return null;
-        }
-
-        @Override
         public Void visitShowStatement(ShowStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
             return null;
@@ -442,18 +440,6 @@ public class Analyzer {
         @Override
         public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
             new QueryAnalyzer(session).analyze(stmt);
-            return null;
-        }
-
-        @Override
-        public Void visitUpdateStatement(UpdateStmt node, ConnectContext context) {
-            UpdateAnalyzer.analyze(node, context);
-            return null;
-        }
-
-        @Override
-        public Void visitDeleteStatement(DeleteStmt node, ConnectContext context) {
-            DeleteAnalyzer.analyze(node, context);
             return null;
         }
 
@@ -627,6 +613,26 @@ public class Analyzer {
         @Override
         public Void visitAlterCatalogStatement(AlterCatalogStmt statement, ConnectContext context) {
             CatalogAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ------------------------------------------- DML Statement -------------------------------------------------------
+
+        @Override
+        public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
+            DMLStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
+            DMLStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt statement, ConnectContext context) {
+            DMLStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -1069,6 +1075,32 @@ public class Analyzer {
 
         @Override
         public Void visitShowNodesStatement(ShowNodesStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Transaction Statement --------------------------------------------------
+
+        @Override
+        public Void visitBeginStatement(BeginStmt statement, ConnectContext context) {
+            TransactionAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCommitStatement(CommitStmt statement, ConnectContext context) {
+            TransactionAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRollbackStatement(RollbackStmt statement, ConnectContext context) {
+            TransactionAnalyzer.analyze(statement, context);
             return null;
         }
     }

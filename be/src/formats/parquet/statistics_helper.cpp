@@ -17,23 +17,23 @@
 #include <string>
 
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exprs/min_max_predicate.h"
 #include "exprs/predicate.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
-#include "runtime/large_int_value.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "storage/types.h"
 #include "storage/uint24.h"
 #include "types/date_value.h"
+#include "types/large_int_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks::parquet {
@@ -157,6 +157,9 @@ bool StatisticsHelper::can_be_used_for_statistics_filter(ExprContext* ctx,
         } else {
             return false;
         }
+    } else if (root_expr->node_type() == TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR) {
+        filter_type = StatisticsHelper::StatSupportedFilter::RF_MIN_MAX;
+        return true;
     } else {
         return false;
     }
@@ -192,8 +195,70 @@ void translate_to_string_value(const ColumnPtr& col, size_t i, std::string& valu
     });
 }
 
+Status StatisticsHelper::min_max_filter_on_min_max_stat(const std::vector<std::string>& min_values,
+                                                        const std::vector<std::string>& max_values,
+                                                        const std::vector<int64_t>& null_counts, ExprContext* ctx,
+                                                        const ParquetField* field, const std::string& timezone,
+                                                        Filter& selected) {
+    const Expr* root_expr = ctx->root();
+    LogicalType ltype = root_expr->type().type;
+    switch (ltype) {
+#define M(NAME)                                                                                                     \
+    case LogicalType::NAME: {                                                                                       \
+        return min_max_filter_on_min_max_stat_t<LogicalType::NAME>(min_values, max_values, null_counts, ctx, field, \
+                                                                   timezone, selected);                             \
+    }
+        APPLY_FOR_ALL_SCALAR_TYPE(M);
+#undef M
+    default:
+        return Status::OK();
+    }
+}
+
+template <LogicalType LType>
+Status StatisticsHelper::min_max_filter_on_min_max_stat_t(const std::vector<std::string>& min_values,
+                                                          const std::vector<std::string>& max_values,
+                                                          const std::vector<int64_t>& null_counts, ExprContext* ctx,
+                                                          const ParquetField* field, const std::string& timezone,
+                                                          Filter& selected) {
+    const Expr* root_expr = ctx->root();
+    const auto* min_max_filter = dynamic_cast<const MinMaxPredicate<LType>*>(root_expr);
+    bool rf_has_null = min_max_filter->has_null();
+
+    ColumnPtr min_column = ColumnHelper::create_column(root_expr->type(), true);
+    ColumnPtr max_column = ColumnHelper::create_column(root_expr->type(), true);
+
+    auto rf_min_value = min_max_filter->get_min_value();
+    auto rf_max_value = min_max_filter->get_max_value();
+
+    RETURN_IF_ERROR(
+            StatisticsHelper::decode_value_into_column(min_column, min_values, root_expr->type(), field, timezone));
+    RETURN_IF_ERROR(
+            StatisticsHelper::decode_value_into_column(max_column, max_values, root_expr->type(), field, timezone));
+
+    for (size_t i = 0; i < min_values.size(); i++) {
+        if (!selected[i]) {
+            continue;
+        }
+        if (rf_has_null && null_counts[i] > 0) {
+            selected[i] = 1;
+            continue;
+        }
+
+        auto zonemap_min_v = ColumnHelper::get_data_column_by_type<LType>(min_column.get())->get_data()[i];
+        auto zonemap_max_v = ColumnHelper::get_data_column_by_type<LType>(max_column.get())->get_data()[i];
+        if (zonemap_min_v > rf_max_value || zonemap_max_v < rf_min_value) {
+            selected[i] = 0;
+            continue;
+        }
+    }
+
+    return Status::OK();
+}
+
 Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
-                                                   const std::vector<std::string>& max_values, ExprContext* ctx,
+                                                   const std::vector<std::string>& max_values,
+                                                   const std::vector<int64_t>& null_counts, ExprContext* ctx,
                                                    const ParquetField* field, const std::string& timezone,
                                                    Filter& selected) {
     const Expr* root_expr = ctx->root();
@@ -201,12 +266,16 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
     const Expr* c = root_expr->get_child(0);
     LogicalType ltype = c->type().type;
     ColumnPtr values;
+    bool is_runtime_filter = false;
+    bool has_null = false;
     switch (ltype) {
 #define M(NAME)                                                                                                \
     case LogicalType::NAME: {                                                                                  \
         const auto* in_filter = dynamic_cast<const VectorizedInConstPredicate<LogicalType::NAME>*>(root_expr); \
         if (in_filter != nullptr) {                                                                            \
             values = in_filter->get_all_values();                                                              \
+            has_null = in_filter->null_in_set();                                                               \
+            is_runtime_filter = in_filter->is_join_runtime_filter();                                           \
             break;                                                                                             \
         } else {                                                                                               \
             return Status::OK();                                                                               \
@@ -250,6 +319,10 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
         if (!selected[i]) {
             continue;
         }
+        if (is_runtime_filter && has_null && null_counts[i] > 0) {
+            selected[i] = 1;
+            continue;
+        }
 
         ObjectPool pool;
         std::string min_value;
@@ -272,6 +345,58 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
     }
 
     return Status::OK();
+}
+
+Status StatisticsHelper::get_min_max_value(const FileMetaData* file_metadata, const TypeDescriptor& type,
+                                           const tparquet::ColumnMetaData* column_meta, const ParquetField* field,
+                                           std::vector<std::string>& min_values, std::vector<std::string>& max_values) {
+    // When statistics is empty, column_meta->__isset.statistics is still true,
+    // but statistics.__isset.xxx may be false, so judgment is required here.
+    bool is_set_min_max = (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||
+                          (column_meta->statistics.__isset.max_value && column_meta->statistics.__isset.min_value);
+    if (!is_set_min_max) {
+        return Status::Aborted("No exist min/max");
+    }
+
+    DCHECK_EQ(field->physical_type, column_meta->type);
+    auto sort_order = sort_order_of_logical_type(type.type);
+
+    if (!has_correct_min_max_stats(file_metadata, *column_meta, sort_order)) {
+        return Status::Aborted("The file has incorrect order");
+    }
+
+    if (column_meta->statistics.__isset.min_value) {
+        min_values.emplace_back(column_meta->statistics.min_value);
+        max_values.emplace_back(column_meta->statistics.max_value);
+    } else {
+        min_values.emplace_back(column_meta->statistics.min);
+        max_values.emplace_back(column_meta->statistics.max);
+    }
+
+    return Status::OK();
+}
+
+Status StatisticsHelper::get_has_nulls(const tparquet::ColumnMetaData* column_meta, std::vector<bool>& has_nulls) {
+    if (!column_meta->statistics.__isset.null_count) {
+        return Status::Aborted("No null_count in column statistics");
+    }
+    has_nulls.emplace_back(column_meta->statistics.null_count > 0);
+    return Status::OK();
+}
+
+Status StatisticsHelper::get_null_counts(const tparquet::ColumnMetaData* column_meta,
+                                         std::vector<int64_t>& null_counts) {
+    if (!column_meta->statistics.__isset.null_count) {
+        return Status::Aborted("No null_count in column statistics");
+    }
+    null_counts.emplace_back(column_meta->statistics.null_count);
+    return Status::OK();
+}
+
+bool StatisticsHelper::has_correct_min_max_stats(const FileMetaData* file_metadata,
+                                                 const tparquet::ColumnMetaData& column_meta,
+                                                 const SortOrder& sort_order) {
+    return file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
 }
 
 } // namespace starrocks::parquet

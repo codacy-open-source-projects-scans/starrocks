@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -45,7 +46,6 @@ import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
@@ -447,7 +447,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
 
             Set<Tablet> sourceTablets = Sets.newHashSet();
             Partition partition = targetTable.getPartition(sourcePartitionName);
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index
+                    : partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 sourceTablets.addAll(index.getTablets());
             }
 
@@ -549,7 +550,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
 
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
-                        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                             // hash set is able to deduplicate the elements
                             tmpTablets.addAll(index.getTablets());
                         }
@@ -653,7 +655,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         for (long id : replayedJob.getTmpPartitionIds()) {
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
-                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                        .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     sourceTablets.addAll(index.getTablets());
                 }
                 targetTable.dropTempPartition(partition.getName(), true);
@@ -777,13 +780,13 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         if (parsedStmt instanceof InsertStmt) {
             ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
         }
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
         // set default session variables for stats context
         SessionVariable sessionVariable = context.getSessionVariable();
         sessionVariable.setUsePageCache(false);
         sessionVariable.setEnableMaterializedViewRewrite(false);
-        sessionVariable.setQueryTimeoutS((int) timeoutMs / 2000);
+        sessionVariable.setInsertTimeoutS((int) timeoutMs / 2000);
 
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());

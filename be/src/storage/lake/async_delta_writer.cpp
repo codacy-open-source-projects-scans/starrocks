@@ -163,7 +163,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         case kFlushTask: {
             auto flush_task = std::static_pointer_cast<FlushTask>(task_ptr);
             if (st.ok()) {
-                st.update(delta_writer->flush());
+                st.update(delta_writer->manual_flush());
             }
             flush_task->cb(st);
             break;
@@ -351,6 +351,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_schema_id(_schema_id)
                                           .set_partial_update_mode(_partial_update_mode)
                                           .set_column_to_expr_value(_column_to_expr_value)
+                                          .set_load_id(_load_id)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);

@@ -46,6 +46,7 @@
 #include "storage/persistent_index.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rows_mapper.h"
+#include "storage/rowset/base_rowset.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -929,6 +930,7 @@ DEFINE_FAIL_POINT(tablet_apply_cache_del_vec_failed);
 DEFINE_FAIL_POINT(tablet_apply_tablet_drop);
 DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
+DEFINE_FAIL_POINT(tablet_delvec_inconsistent);
 
 void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
@@ -1614,13 +1616,21 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             size_t cur_old = old_del_vec->cardinality();
             size_t cur_add = new_delete.second.size();
             size_t cur_new = new_del_vecs[idx].second->cardinality();
+            FAIL_POINT_TRIGGER_EXECUTE(tablet_delvec_inconsistent, {
+                cur_old = 0;
+                cur_add = 1;
+                cur_new = 0;
+            });
             if (cur_old + cur_add != cur_new) {
                 // should not happen, data inconsistent
-                LOG(FATAL) << strings::Substitute(
+                string msg = strings::Substitute(
                         "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
                         "v:$6",
                         _tablet.tablet_id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(),
                         version.major_number());
+                LOG(ERROR) << msg;
+                _set_error(msg);
+                return Status::InternalError(msg);
             }
             if (VLOG_IS_ON(1)) {
                 StringAppendF(&delvec_change_info, " %u:%zu(%ld)+%zu=%zu", rssid, cur_old, old_del_vec->version(),
@@ -2647,7 +2657,7 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
     // too much time.
     {
         std::unique_lock wrlock(_tablet.get_header_lock());
-        rewrite_rs_meta();
+        rewrite_rs_meta(false);
     }
 
     // GC works that can be done outside of lock
@@ -3692,6 +3702,7 @@ void TabletUpdates::_print_rowsets(std::vector<uint32_t>& rowsets, std::string* 
 }
 
 void TabletUpdates::_set_error(const string& msg) {
+    StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
     _error_msg = msg;
     _error = true;
     _apply_version_changed.notify_all();
@@ -5260,9 +5271,10 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         if (fs == nullptr) {
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
         }
-        std::string seg_path =
-                Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
-        auto segment = Segment::open(fs, FileInfo{seg_path}, rssid - iter->first, rowset->schema());
+        auto seg_id = rssid - iter->first;
+        std::string seg_path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), seg_id);
+        FileInfo finfo{.path = seg_path, .encryption_meta = rowset->rowset_meta()->get_segment_encryption_meta(seg_id)};
+        auto segment = Segment::open(fs, finfo, seg_id, rowset->schema());
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
@@ -5277,7 +5289,11 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
         iter_opts.use_page_cache = true;
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_info()));
+        RandomAccessFileOptions ropts;
+        if ((*segment)->encryption_info()) {
+            ropts.encryption_info = *(*segment)->encryption_info();
+        }
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(ropts, (*segment)->file_info()));
         iter_opts.read_file = read_file.get();
 
         if (full_row_column) {
@@ -5678,50 +5694,50 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
     }
 }
 
-void TabletUpdates::rewrite_rs_meta() {
-    std::unordered_map<int64_t, RowsetSharedPtr> pending_rs;
-    std::vector<RowsetSharedPtr> published_rs;
-    {
-        std::lock_guard lg(_lock);
-        for (auto& [_, rs] : _rowsets) {
-            if (rs->rowset_meta()->skip_tablet_schema()) {
-                published_rs.emplace_back(rs);
-            }
-        }
-
-        for (auto& [version, rs] : _pending_commits) {
-            if (rs->rowset_meta()->skip_tablet_schema()) {
-                pending_rs[version] = rs;
-            }
-        }
-    }
+void TabletUpdates::rewrite_rs_meta(bool is_fatal) {
+    std::lock_guard lg(_lock);
+    Status st;
+    rocksdb::WriteBatch wb;
+    auto kv_store = _tablet.data_dir()->get_meta();
+    int32_t pending_rs = 0;
+    int32_t published_rs = 0;
 
     for (auto& [version, rs] : _pending_commits) {
-        RowsetMetaPB meta_pb;
-        rs->rowset_meta()->get_full_meta_pb(&meta_pb);
-        Status st = TabletMetaManager::pending_rowset_commit(
-                _tablet.data_dir(), _tablet.tablet_id(), version, meta_pb,
-                RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rs->rowset_id()));
-        LOG_IF(FATAL, !st.ok()) << "fail to save pending rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
-                                << ", rowset_id=" << rs->rowset_id();
-        rs->rowset_meta()->set_skip_tablet_schema(false);
+        if (rs->rowset_meta()->skip_tablet_schema()) {
+            rs->rowset_meta()->set_skip_tablet_schema(false);
+            RowsetMetaPB meta_pb;
+            rs->rowset_meta()->get_full_meta_pb(&meta_pb);
+            st = TabletMetaManager::put_pending_rowset_meta(_tablet.data_dir(), &wb, _tablet.tablet_id(), version,
+                                                            meta_pb);
+            if (!st.ok()) break;
+            pending_rs++;
+        }
     }
 
-    auto kv_store = _tablet.data_dir()->get_meta();
-    rocksdb::WriteBatch wb;
-    for (auto& rs : published_rs) {
-        RowsetMetaPB meta_pb;
-        rs->rowset_meta()->get_full_meta_pb(&meta_pb);
-        Status st = TabletMetaManager::put_rowset_meta(_tablet.data_dir(), &wb, _tablet.tablet_id(), meta_pb);
-        LOG_IF(FATAL, !st.ok()) << "fail to put published rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
-                                << ", rowset_id=" << rs->rowset_id();
+    if (st.ok()) {
+        for (auto& [_, rs] : _rowsets) {
+            if (rs->rowset_meta()->skip_tablet_schema()) {
+                rs->rowset_meta()->set_skip_tablet_schema(false);
+                RowsetMetaPB meta_pb;
+                rs->rowset_meta()->get_full_meta_pb(&meta_pb);
+                st = TabletMetaManager::put_rowset_meta(_tablet.data_dir(), &wb, _tablet.tablet_id(), meta_pb);
+                if (!st.ok()) break;
+                published_rs++;
+            }
+        }
     }
-    Status st = kv_store->write_batch(&wb);
-    LOG_IF(FATAL, !st.ok()) << "fail to write published rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
-                            << ", rowset nul=" << published_rs.size();
-    for (auto& rs : published_rs) {
-        rs->rowset_meta()->set_skip_tablet_schema(false);
+
+    if (st.ok()) {
+        st = kv_store->write_batch(&wb);
     }
+
+    LOG_IF(FATAL, is_fatal && !st.ok()) << "fail to rewrite rowset meta: " << st
+                                        << ". tablet_id=" << _tablet.tablet_id()
+                                        << ", pending rowset num=" << pending_rs
+                                        << ", published rowset num=" << published_rs;
+    LOG_IF(WARNING, !is_fatal && !st.ok())
+            << "fail to rewrite rowset meta: " << st << ". tablet_id=" << _tablet.tablet_id()
+            << ", pending rowset num=" << pending_rs << ", published rowset num=" << published_rs;
 }
 
 } // namespace starrocks

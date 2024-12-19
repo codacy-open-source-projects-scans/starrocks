@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TColumn;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.text.translate.UnicodeUnescaper;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -97,6 +98,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // All references to Column should use columnId instead of name.
     @SerializedName(value = "columnId")
     private ColumnId columnId;
+    @SerializedName(value = "uniqueId")
+    private int uniqueId;
 
     @SerializedName(value = "type")
     private Type type;
@@ -134,8 +137,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
-    @SerializedName(value = "uniqueId")
-    private int uniqueId;
     // physicalName is used to store the physical name of the column in the storage layer.
     // for example, the physical name of a column in a parquet file.
     // used in delta lake column mapping name mode
@@ -243,8 +244,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public Column(Column column) {
         this.name = column.getName();
         this.columnId = column.getColumnId();
+        this.aggStateDesc = column.aggStateDesc;
         this.type = column.type;
-        this.type.setAggStateDesc(this.aggStateDesc);
+        this.type.setAggStateDesc(column.aggStateDesc);
         this.aggregationType = column.getAggregationType();
         this.isAggregationTypeImplicit = column.isAggregationTypeImplicit();
         this.isKey = column.isKey();
@@ -628,7 +630,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         } else if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
+            sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                    .append("\" ");
         } else if (isGeneratedColumn()) {
             String generatedColumnSql;
             if (idToColumn != null) {
@@ -745,7 +748,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("AUTO_INCREMENT ");
             }
             if (defaultValue != null && !type.isOnlyMetricType()) {
-                sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
+                sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                        .append("\" ");
             }
         } else {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {

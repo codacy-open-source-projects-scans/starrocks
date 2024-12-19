@@ -230,11 +230,13 @@ void ScanOperator::_detach_chunk_sources() {
 
 void ScanOperator::update_exec_stats(RuntimeState* state) {
     auto ctx = state->query_ctx();
-    ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
-    if (ctx != nullptr && _bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
-        int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
-        int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
-        ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+    if (ctx != nullptr) {
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
     }
 }
 
@@ -419,7 +421,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // driver_id will be used in some Expr such as regex_replace
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(this);
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());

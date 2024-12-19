@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
@@ -57,7 +58,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -80,9 +81,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
@@ -116,6 +119,11 @@ public class StreamLoadScanNode extends LoadScanNode {
     private boolean useVectorizedLoad;
 
     private boolean needAssignBE;
+
+    private boolean enableBatchWrite = false;
+    private int batchWriteIntervalMs;
+    private ImmutableMap<String, String> batchWriteParameters;
+    private Set<Long> batchWriteBackendIds;
 
     private List<Backend> backends;
     private int nextBe = 0;
@@ -175,12 +183,20 @@ public class StreamLoadScanNode extends LoadScanNode {
         this.needAssignBE = needAssignBE;
     }
 
+    public void setBatchWrite(int batchWriteIntervalMs, ImmutableMap<String, String> loadParameters, Set<Long> batchWriteBackendIds) {
+        setNeedAssignBE(true);
+        this.enableBatchWrite = true;
+        this.batchWriteIntervalMs = batchWriteIntervalMs;
+        this.batchWriteParameters = loadParameters;
+        this.batchWriteBackendIds = new HashSet<>(batchWriteBackendIds);
+    }
+
     public boolean nullExprInAutoIncrement() {
         return nullExprInAutoIncrement;
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
         // can't call super.init(), because after super.init, conjuncts would be null
         if (needAssignBE) {
             assignBackends();
@@ -192,7 +208,7 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     // Called from init, construct source tuple information
-    private void initParams() throws UserException {
+    private void initParams() throws StarRocksException {
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
         paramCreateContext.params = params;
 
@@ -237,7 +253,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         initWhereExpr(streamLoadInfo.getWhereExpr(), analyzer);
     }
 
-    private void initColumns() throws UserException {
+    private void initColumns() throws StarRocksException {
         paramCreateContext.tupleDescriptor = analyzer.getDescTbl().createTupleDescriptor("StreamLoadScanNode");
         Load.initColumns(dstTable, streamLoadInfo.getColumnExprDescs(), null /* no hadoop function */,
                 exprsByName, analyzer, paramCreateContext.tupleDescriptor, slotDescByName,
@@ -246,24 +262,37 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException, UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException, StarRocksException {
         finalizeParams();
     }
 
-    private void assignBackends() throws UserException {
+    private void assignBackends() throws StarRocksException {
         backends = Lists.newArrayList();
-        for (Backend be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
-            if (be.isAvailable()) {
-                backends.add(be);
+        if (enableBatchWrite) {
+            for (long backendId : batchWriteBackendIds) {
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
+                if (backend == null) {
+                    throw new StarRocksException(String.format("Can't find batch write backend [%s]", backendId));
+                }
+                if (!backend.isAvailable()) {
+                    throw new StarRocksException(String.format("Batch write backend [%s] is not available", backendId));
+                }
+                backends.add(backend);
             }
+        } else {
+            for (Backend be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
+                if (be.isAvailable()) {
+                    backends.add(be);
+                }
+            }
+            Collections.shuffle(backends, random);
         }
         if (backends.isEmpty()) {
-            throw new UserException("No available backends");
+            throw new StarRocksException("No available backends");
         }
-        Collections.shuffle(backends, random);
     }
 
-    private void finalizeParams() throws UserException {
+    private void finalizeParams() throws StarRocksException {
         boolean negative = streamLoadInfo.getNegative();
         Map<Integer, Integer> destSidToSrcSidWithoutTrans = Maps.newHashMap();
         for (SlotDescriptor dstSlotDesc : desc.getSlots()) {
@@ -294,7 +323,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                         if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
                             expr = column.getDefaultExpr().obtainExpr();
                         } else {
-                            throw new UserException("Column(" + column + ") has unsupported default value:"
+                            throw new StarRocksException("Column(" + column + ") has unsupported default value:"
                                     + column.getDefaultExpr().getExpr());
                         }
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
@@ -351,7 +380,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         createScanRange();
     }
 
-    private void createScanRange() throws UserException {
+    private void createScanRange() throws StarRocksException {
         for (int i = 0; i < this.numInstances; i++) {
             TBrokerScanRange brokerScanRange = new TBrokerScanRange();
             brokerScanRange.setParams(paramCreateContext.params);
@@ -388,7 +417,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                     }
                     break;
                 default:
-                    throw new UserException("unsupported file type, type=" + streamLoadInfo.getFileType());
+                    throw new StarRocksException("unsupported file type, type=" + streamLoadInfo.getFileType());
             }
             rangeDesc.setStart_offset(0);
             rangeDesc.setSize(-1);
@@ -398,6 +427,9 @@ public class StreamLoadScanNode extends LoadScanNode {
             brokerScanRange.setBroker_addresses(Lists.newArrayList());
             if (needAssignBE) {
                 brokerScanRange.setChannel_id(curChannelId++);
+                brokerScanRange.setEnable_batch_write(enableBatchWrite);
+                brokerScanRange.setBatch_write_interval_ms(batchWriteIntervalMs);
+                brokerScanRange.setBatch_write_parameters(batchWriteParameters);
             }
             TScanRangeLocations locations = new TScanRangeLocations();
             TScanRange scanRange = new TScanRange();

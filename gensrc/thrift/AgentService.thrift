@@ -118,6 +118,8 @@ struct TCreateTabletReq {
     21: optional i32 compression_level = -1;
     // Whether or not use shared tablet initial metadata.
     22: optional bool enable_tablet_creation_optimization = false;
+    // The timeout FE will wait for the tablet to be created.
+    23: optional i64 timeout_ms = -1;
 }
 
 struct TDropTabletReq {
@@ -435,6 +437,7 @@ struct TTabletMetaInfo {
     9: optional TTabletSchema tablet_schema;
     // |create_schema_file| only used when |tablet_schema| exists
     10: optional bool create_schema_file;
+    11: optional TPersistentIndexType persistent_index_type;
 }
 
 struct TUpdateTabletMetaInfoReq {

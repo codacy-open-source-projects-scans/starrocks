@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -41,10 +42,15 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.HttpConnectContext;
@@ -55,10 +61,6 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.ssl.SSLChannel;
 import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -66,6 +68,8 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
+import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -257,8 +261,27 @@ public class ConnectContext {
         return threadLocalInfo.get();
     }
 
+    public static SessionVariable getSessionVariableOrDefault() {
+        ConnectContext ctx = get();
+        return (ctx != null) ? ctx.sessionVariable : SessionVariable.DEFAULT_SESSION_VARIABLE;
+    }
+
     public static void remove() {
         threadLocalInfo.remove();
+    }
+
+    public boolean isQueryStmt(StatementBase statement) {
+        if (statement instanceof QueryStatement) {
+            return true;
+        }
+        if (statement instanceof ExecuteStmt) {
+            ExecuteStmt executeStmt = (ExecuteStmt) statement;
+            PrepareStmtContext prepareStmtContext = getPreparedStmt(executeStmt.getStmtName());
+            if (prepareStmtContext != null) {
+                return prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement;
+            }
+        }
+        return false;
     }
 
     public boolean isSend() {
@@ -565,6 +588,12 @@ public class ConnectContext {
 
     public void setStartTime() {
         startTime = Instant.now();
+        returnRows = 0;
+    }
+
+    @VisibleForTesting
+    public void setStartTime(Instant start) {
+        startTime = start;
         returnRows = 0;
     }
 
@@ -934,7 +963,7 @@ public class ConnectContext {
                     Thread.sleep(10);
                     times++;
                     if (times > 100) {
-                        LOG.warn("wait for close fail, break.");
+                        LOG.warn("kill queryId={} connectId={} wait for close fail, break.", queryId, connectionId);
                         break;
                     }
                 } catch (InterruptedException e) {
@@ -945,6 +974,18 @@ public class ConnectContext {
             // Close channel to break connection with client
             getMysqlChannel().close();
         }
+    }
+
+    public int getExecTimeout() {
+        return executor != null ? executor.getExecTimeout() : sessionVariable.getQueryTimeoutS();
+    }
+
+    private String getExecType() {
+        return executor != null ? executor.getExecType() : "Query";
+    }
+
+    private boolean isExecLoadType() {
+        return executor != null && executor.isExecLoadType();
     }
 
     public void checkTimeout(long now) {
@@ -960,27 +1001,36 @@ public class ConnectContext {
         if (executor != null) {
             sql = executor.getOriginStmtInString();
         }
+        String errMsg = "";
         if (command == MysqlCommand.COM_SLEEP) {
-            if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
+            int waitTimeout = sessionVariable.getWaitTimeoutS();
+            if (delta > waitTimeout * 1000L) {
                 // Need kill this connection.
                 LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS(), queryId, sql);
+                        getMysqlChannel().getRemoteHostPortString(), waitTimeout, queryId, SqlUtils.sqlPrefix(sql));
 
                 killFlag = true;
                 killConnection = true;
+
+                errMsg = String.format("Connection reached its wait timeout of %d seconds", waitTimeout);
             }
         } else {
-            long timeoutSecond = sessionVariable.getQueryTimeoutS();
+            long timeoutSecond = getExecTimeout();
             if (delta > timeoutSecond * 1000L) {
-                LOG.warn("kill query timeout, remote: {}, query timeout: {}, query id: {}, sql: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS(), queryId, sql);
+                LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, query id: {}, sql: {}",
+                        getExecType().toLowerCase(), getMysqlChannel().getRemoteHostPortString(), timeoutSecond,
+                        queryId, SqlUtils.sqlPrefix(sql));
 
                 // Only kill
                 killFlag = true;
+
+                String suggestedMsg = String.format("please increase the '%s' session variable",
+                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT);
+                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), timeoutSecond, suggestedMsg);
             }
         }
         if (killFlag) {
-            kill(killConnection, "query timeout");
+            kill(killConnection, errMsg);
         }
     }
 
@@ -1053,7 +1103,7 @@ public class ConnectContext {
     public StmtExecutor executeSql(String sql) throws Exception {
         StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
         sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
-        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(this, sqlStmt);
         setExecutor(executor);
         setThreadLocalInfo();
         executor.execute();
@@ -1152,7 +1202,7 @@ public class ConnectContext {
             CleanTemporaryTableStmt cleanTemporaryTableStmt = new CleanTemporaryTableStmt(sessionId);
             cleanTemporaryTableStmt.setOrigStmt(
                     new OriginStatement("clean temporary table on session '" + sessionId.toString() + "'"));
-            executor = new StmtExecutor(this, cleanTemporaryTableStmt);
+            executor = StmtExecutor.newInternalExecutor(this, cleanTemporaryTableStmt);
             executor.execute();
         } catch (Throwable e) {
             LOG.warn("Failed to clean temporary table on session {}, {}", sessionId, e);

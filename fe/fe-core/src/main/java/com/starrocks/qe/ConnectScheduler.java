@@ -37,6 +37,8 @@ package com.starrocks.qe;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
@@ -45,8 +47,7 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.NegotiateState;
 import com.starrocks.mysql.nio.NConnectContext;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -71,6 +72,8 @@ public class ConnectScheduler {
     private final AtomicInteger nextConnectionId;
 
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
+    private final Map<String, ArrowFlightSqlConnectContext> arrowFlightSqlConnectContextMap = Maps.newConcurrentMap();
+
     private final Map<String, AtomicInteger> connCountByUser = Maps.newConcurrentMap();
     private final ReentrantLock connStatsLock = new ReentrantLock();
     private final ExecutorService executor = ThreadPoolManager
@@ -104,10 +107,18 @@ public class ConnectScheduler {
                         ConnectContext connectContext = connectionMap.get(connectId);
                         connectContext.checkTimeout(now);
                     }
+
+                    // remove arrow flight sql timeout connect
+                    ArrayList<String> arrowFlightSqlConnections =
+                            new ArrayList<>(arrowFlightSqlConnectContextMap.keySet());
+                    for (String token : arrowFlightSqlConnections) {
+                        ConnectContext connectContext = arrowFlightSqlConnectContextMap.get(token);
+                        connectContext.checkTimeout(now);
+                    }
                 }
             } catch (Throwable e) {
                 //Catch Exception to avoid thread exit
-                LOG.warn("Timeout checker exception, Internal error : " + e.getMessage());
+                LOG.warn("Timeout checker exception, Internal error : {}", e.getMessage(), e);
             }
         }
     }
@@ -151,7 +162,8 @@ public class ConnectScheduler {
             connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
             AtomicInteger currentConnAtomic = connCountByUser.get(ctx.getQualifiedUser());
             int currentConn = currentConnAtomic.get();
-            long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
+            long currentUserMaxConn =
+                    ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
             if (currentConn >= currentUserMaxConn) {
                 String userErrMsg = "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
                         ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
@@ -166,6 +178,12 @@ public class ConnectScheduler {
             numberConnection.incrementAndGet();
             currentConnAtomic.incrementAndGet();
             connectionMap.put((long) ctx.getConnectionId(), ctx);
+
+            if (ctx instanceof ArrowFlightSqlConnectContext) {
+                ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
+                arrowFlightSqlConnectContextMap.put(context.getToken(), context);
+            }
+
             return new Pair<>(true, null);
         } finally {
             connStatsLock.unlock();
@@ -187,6 +205,11 @@ public class ConnectScheduler {
                         ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId(),
                         ctx.getQualifiedUser(), conns != null ? Integer.toString(conns.get()) : "nil");
             }
+
+            if (ctx instanceof ArrowFlightSqlConnectContext) {
+                ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
+                arrowFlightSqlConnectContextMap.remove(context.getToken());
+            }
         } finally {
             connStatsLock.unlock();
         }
@@ -200,12 +223,20 @@ public class ConnectScheduler {
         return connectionMap.get(connectionId);
     }
 
+    public ConnectContext getContext(String token) {
+        return connectionMap.get(token);
+    }
+
+    public ArrowFlightSqlConnectContext getArrowFlightSqlConnectContext(String token) {
+        return arrowFlightSqlConnectContextMap.get(token);
+    }
+
     public ConnectContext findContextByQueryId(String queryId) {
         return connectionMap.values().stream().filter(
-                        (Predicate<ConnectContext>) c ->
-                                c.getQueryId() != null
+                (Predicate<ConnectContext>) c ->
+                        c.getQueryId() != null
                                 && queryId.equals(c.getQueryId().toString())
-                )
+        )
                 .findFirst().orElse(null);
     }
 

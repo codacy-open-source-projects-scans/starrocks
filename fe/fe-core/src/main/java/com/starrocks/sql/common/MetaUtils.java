@@ -172,6 +172,25 @@ public class MetaUtils {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
+            return table.getPartition(partitionId) != null;
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+    }
+
+    public static boolean isPhysicalPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+        Database db = stateMgr.getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return false;
+        }
+        // lake table or lake materialized view
+        OlapTable table = (OlapTable) stateMgr.getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            return false;
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
             return table.getPhysicalPartition(partitionId) != null;
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);

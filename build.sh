@@ -294,7 +294,7 @@ if [ ${BUILD_BE} -eq 1 ] && [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     exit 1
 fi
 if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
-    echo "do not build java extendsions when build format-lib."
+    echo "do not build java extensions when build format-lib."
     BUILD_JAVA_EXT=OFF
 fi
 
@@ -373,9 +373,11 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         echo "Error: cmake is not found"
         exit 1
     fi
+
     # When build starrocks format lib, USE_STAROS must be ON
     if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         USE_STAROS=ON
+        WITH_TENANN=OFF
     fi
 
     CMAKE_BUILD_TYPE=$BUILD_TYPE
@@ -511,6 +513,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/conf/udf_security.policy ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/core-site.xml ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/cluster_snapshot.yaml ${STARROCKS_OUTPUT}/fe/conf/
 
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
@@ -519,7 +522,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/

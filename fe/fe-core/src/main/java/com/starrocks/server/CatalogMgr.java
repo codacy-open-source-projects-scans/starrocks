@@ -20,6 +20,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.NativeAccessController;
+import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
+import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
@@ -48,9 +51,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.NativeAccessController;
-import com.starrocks.privilege.ranger.hive.RangerHiveAccessController;
-import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -93,6 +93,11 @@ public class CatalogMgr {
 
     public void createCatalog(CreateCatalogStmt stmt) throws DdlException {
         createCatalog(stmt.getCatalogType(), stmt.getCatalogName(), stmt.getComment(), stmt.getProperties());
+    }
+
+    public void createCatalogForRestore(Catalog catalog) throws DdlException {
+        dropCatalogForRestore(catalog, false);
+        createCatalog(catalog.getType(), catalog.getName(), catalog.getComment(), catalog.getConfig());
     }
 
     // please keep connector and catalog create together, they need keep in consistent asap.
@@ -155,6 +160,16 @@ public class CatalogMgr {
         }
     }
 
+    public void dropCatalogForRestore(Catalog catalog, boolean isReplay) {
+        if (!isReplay && catalogExists(catalog.getName())) {
+            DropCatalogStmt stmt = new DropCatalogStmt(catalog.getName());
+            dropCatalog(stmt);
+        } else if (isReplay) {
+            DropCatalogLog dropCatalogLog = new DropCatalogLog(catalog.getName());
+            replayDropCatalog(dropCatalogLog);
+        }
+    }
+
     public void dropCatalog(DropCatalogStmt stmt) {
         String catalogName = stmt.getName();
         readLock();
@@ -191,7 +206,7 @@ public class CatalogMgr {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
 
-                if (serviceName.isEmpty()) {
+                if (Strings.isNullOrEmpty(serviceName)) {
                     if (Config.access_control.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                     } else {
@@ -272,8 +287,7 @@ public class CatalogMgr {
                 readUnlock();
             }
 
-            Map<String, String> properties = catalog.getConfig();
-            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            String serviceName = config.get("ranger.plugin.hive.service.name");
             if (serviceName == null || serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
@@ -340,7 +354,7 @@ public class CatalogMgr {
             String catalogName = log.getCatalogName();
             Map<String, String> properties = log.getProperties();
             String serviceName = properties.get("ranger.plugin.hive.service.name");
-            if (serviceName.isEmpty()) {
+            if (Strings.isNullOrEmpty(serviceName)) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                 } else {

@@ -141,8 +141,12 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
         if (st.is_already_exist()) {
+            StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
             builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
         }
+        // If load failed, release lock guard and remove index entry
+        // MUST release lock guard before remove index entry
+        guard.reset(nullptr);
         _index_cache.remove(index_entry);
         std::string msg = strings::Substitute("prepare_primary_index: load primary index failed: $0", st.to_string());
         LOG(ERROR) << msg;
@@ -151,6 +155,8 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
     _block_cache->update_memory_usage();
     st = index.prepare(EditVersion(new_version, 0), 0);
     if (!st.ok()) {
+        // If prepare failed, release lock guard and remove index entry
+        guard.reset(nullptr);
         _index_cache.remove(index_entry);
         std::string msg =
                 strings::Substitute("prepare_primary_index: prepare primary index failed: $0", st.to_string());
@@ -294,6 +300,13 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             size_t cur_old = old_del_vec->cardinality();
             size_t cur_add = new_delete.second.size();
             size_t cur_new = new_del_vecs[idx].second->cardinality();
+            // For test purpose, we can set recover flag to test recover mode.
+            Status test_status = Status::OK();
+            TEST_SYNC_POINT_CALLBACK("delvec_inconsistent", &test_status);
+            if (!test_status.ok()) {
+                builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
+                return test_status;
+            }
             if (cur_old + cur_add != cur_new) {
                 // should not happen, data inconsistent
                 std::string error_msg = strings::Substitute(
@@ -301,6 +314,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                         "v:$6",
                         tablet->id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(), metadata->version());
                 LOG(ERROR) << error_msg;
+                StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
                 if (!config::experimental_lake_ignore_pk_consistency_check) {
                     builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
                     return Status::InternalError(error_msg);

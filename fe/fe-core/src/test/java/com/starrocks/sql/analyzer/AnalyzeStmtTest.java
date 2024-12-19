@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
@@ -54,7 +55,9 @@ import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.columns.PredicateColumnsStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -103,13 +106,14 @@ public class AnalyzeStmtTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(createStructTableSql);
+
     }
 
     @Test
     public void testAllColumns() {
         String sql = "analyze table db.tbl";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-        Assert.assertEquals(analyzeStmt.getColumnNames().size(), 0);
+        Assert.assertEquals(4, analyzeStmt.getColumnNames().size());
     }
 
     @Test
@@ -136,7 +140,7 @@ public class AnalyzeStmtTest {
 
         sql = "analyze table test.t0";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-        Assert.assertEquals(analyzeStmt.getColumnNames().size(), 0);
+        Assert.assertEquals(3, analyzeStmt.getColumnNames().size());
     }
 
     @Test
@@ -200,6 +204,10 @@ public class AnalyzeStmtTest {
         Assert.assertFalse(analyzeStmt.isAsync());
 
         sql = "analyze full table db.tbl with async mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertTrue(analyzeStmt.isAsync());
+
+        sql = "analyze full table db.tbl partition(`tbl`) with async mode";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assert.assertTrue(analyzeStmt.isAsync());
     }
@@ -323,7 +331,7 @@ public class AnalyzeStmtTest {
         OlapTable t0 = (OlapTable) starRocksAssert.getCtx().getGlobalStateMgr()
                 .getLocalMetastore().getDb("db").getTable("tbl");
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(10000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
         }
 
         String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -332,7 +340,7 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("1", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(400000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(400000);
         }
 
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -341,7 +349,7 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(20000000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(20000000);
         }
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
                 "properties(\"histogram_sample_ratio\"=\"0.9\")";
@@ -467,5 +475,18 @@ public class AnalyzeStmtTest {
         analyzeFail("select distinct v5 from tarray");
         analyzeFail("select * from tarray order by v5");
         analyzeFail("select DENSE_RANK() OVER(partition by v5 order by v4) from tarray");
+    }
+
+    @Test
+    public void testAnalyzePredicateColumns() {
+        StatisticsMetaManager statistic = new StatisticsMetaManager();
+        statistic.createStatisticsTablesForTest();
+        TableKeeper keeper = PredicateColumnsStorage.createKeeper();
+        keeper.run();
+
+        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl all columns");
+        Assert.assertTrue(stmt.isAllColumns());
+        stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl predicate columns");
+        Assert.assertTrue(stmt.isUsePredicateColumns());
     }
 }

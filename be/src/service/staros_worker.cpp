@@ -89,7 +89,18 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
             return st;
         }
     }
-    _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
+    auto ret = _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
+    l.unlock();
+    if (ret.second) {
+        // it is an insert op to the map
+        // NOTE:
+        //  1. Since the following statement is invoked outside the lock, it is possible that
+        //     the shard may be removed when retrieving from the callback.
+        //  2. Expect the callback is as quick and simple as possible, otherwise it will occupy
+        //     the GRPC thread too long and blocking response sent back to StarManager. A better
+        //     choice would be: starting a new thread pool and send callback tasks in the thread pool.
+        on_add_shard_event(shard.id);
+    }
     return absl::OkStatus();
 }
 
@@ -343,10 +354,15 @@ Status to_status(const absl::Status& absl_status) {
     }
 }
 
-void init_staros_worker() {
+void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache) {
     if (g_starlet.get() != nullptr) {
         return;
     }
+
+    if (star_cache) {
+        (void)fslib::set_star_cache(star_cache);
+    }
+
     // skip staros reinit aws sdk
     staros::starlet::fslib::skip_aws_init_api = true;
 

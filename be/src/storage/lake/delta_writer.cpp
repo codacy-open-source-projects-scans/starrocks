@@ -27,6 +27,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -77,7 +78,7 @@ public:
                              bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
                              MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id,
                              const PartialUpdateMode& partial_update_mode,
-                             const std::map<string, string>* column_to_expr_value)
+                             const std::map<string, string>* column_to_expr_value, PUniqueId load_id)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -91,7 +92,8 @@ public:
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
               _partial_update_mode(partial_update_mode),
-              _column_to_expr_value(column_to_expr_value) {}
+              _column_to_expr_value(column_to_expr_value),
+              _load_id(std::move(load_id)) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -114,6 +116,8 @@ public:
     [[nodiscard]] int64_t txn_id() const { return _txn_id; }
 
     [[nodiscard]] MemTracker* mem_tracker() { return _mem_tracker; }
+
+    Status manual_flush();
 
     Status flush();
 
@@ -200,6 +204,10 @@ private:
     int64_t _last_write_ts = 0;
 
     const std::map<string, string>* _column_to_expr_value = nullptr;
+
+    PUniqueId _load_id;
+    // Used for maintain spill block for bulk load.
+    std::unique_ptr<LoadSpillBlockManager> _load_spill_block_mgr;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -307,6 +315,11 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
     }
 }
 
+inline Status DeltaWriterImpl::manual_flush() {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    return flush_async();
+}
+
 inline Status DeltaWriterImpl::flush() {
     RETURN_IF_ERROR(flush_async());
     return _flush_token->wait();
@@ -351,6 +364,11 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
+    if (_load_spill_block_mgr == nullptr) {
+        _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(
+                UniqueId(_load_id).to_thrift(), _tablet_manager->tablet_root_location(_tablet_id));
+        //RETURN_IF_ERROR(_load_spill_block_mgr->init());
+    }
     if (_mem_table == nullptr) {
         // When loading memory usage is larger than hard limit, we will reject new loading task.
         if (!config::enable_new_load_on_memory_limit_exceeded &&
@@ -699,6 +717,11 @@ MemTracker* DeltaWriter::mem_tracker() {
     return _impl->mem_tracker();
 }
 
+Status DeltaWriter::manual_flush() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::manual_flush() in a bthread";
+    return _impl->manual_flush();
+}
+
 Status DeltaWriter::flush() {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::flush() in a bthread";
     return _impl->flush();
@@ -769,9 +792,10 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     if (UNLIKELY(_schema_id == 0)) {
         return Status::InvalidArgument("schema_id not set");
     }
-    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
-                                    _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
-                                    _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value);
+    auto impl =
+            new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
+                                _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
+                                _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id);
     return std::make_unique<DeltaWriter>(impl);
 }
 

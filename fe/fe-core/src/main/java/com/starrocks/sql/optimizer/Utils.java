@@ -31,6 +31,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -55,10 +56,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -848,75 +849,28 @@ public class Utils {
     }
 
     /**
-     * Check if the operator has applied the rule
-     * @param op input operator to be checked
-     * @param ruleMask specific rule mask
-     * @return true if the operator has applied the rule, false otherwise
-     */
-    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return false;
-        }
-        // TODO: support cte inline
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & ruleMask) != 0;
-    }
-
-    /**
-     * Set the rule mask to the operator
-     * @param op input operator
-     * @param ruleMask specific rule mask
-     */
-    public static void setOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return;
-        }
-        op.setOpRuleMask(op.getOpRuleMask() | ruleMask);
-    }
-
-    /**
-     * Reset the rule mask to the operator
-     * @param op input operator
-     * @param ruleMask specific rule mask
-     */
-    public static void resetOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return;
-        }
-        op.resetOpRuleMask(ruleMask);
-    }
-
-    /**
      * Check if the optExpression has applied the rule in recursively
      * @param optExpression input optExpression to be checked
      * @param ruleMask specific rule mask
      * @return true if the optExpression or its children have applied the rule, false otherwise
      */
     public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+        return isOptHasAppliedRule(optExpression, op -> op.isOpRuleBitSet(ruleMask));
+    }
+
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, Predicate<Operator> pred) {
         if (optExpression == null) {
             return false;
         }
-        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
+        if (pred.test(optExpression.getOp())) {
             return true;
         }
         for (OptExpression child : optExpression.getInputs()) {
-            if (isOptHasAppliedRule(child, ruleMask)) {
+            if (isOptHasAppliedRule(child, pred)) {
                 return true;
             }
         }
         return false;
-    }
-
-
-    public static void setOptScanOpsBit(OptExpression input,
-                                        int bit) {
-        List<LogicalScanOperator> scanOps = MvUtils.getScanOperator(input);
-        scanOps.stream().forEach(op -> op.setOpRuleMask(op.getOpRuleMask() | bit));
-    }
-
-    public static void setOpBit(OptExpression input,
-                                int bit) {
-        input.getOp().setOpRuleMask(input.getOp().getOpRuleMask() | bit);
     }
 
     @SuppressWarnings("unchecked")
@@ -953,5 +907,55 @@ public class Utils {
         }
 
         return value;
+    }
+
+    /**
+     * Recursively resolve the column ref for complicated expressions
+     * Throw exception if that ref cannot be found in the operator expression
+     *
+     * @param ref     column ref
+     * @param factory column factory
+     * @param expr    operator expression
+     * @return all resolved columns
+     */
+    public static List<Pair<Table, Column>> resolveColumnRefRecursive(ColumnRefOperator ref, ColumnRefFactory factory,
+                                                                      OptExpression expr) {
+        // consult the factory
+        Pair<Table, Column> tableAndColumn = factory.getTableAndColumn(ref);
+        if (tableAndColumn != null) {
+            return List.of(tableAndColumn);
+        }
+
+        // When deriving stats, the OptExpression is not exist but only a GroupExpression. We cannot resolve the
+        // ColumnRef from it
+        if (expr == null) {
+            return null;
+        }
+
+        // Consult the projection
+        if (expr.getOp().getProjection() != null) {
+            ScalarOperator impl = expr.getOp().getProjection().resolveColumnRef(ref);
+            if (impl != null) {
+                List<ColumnRefOperator> subRefs = Utils.extractColumnRef(impl);
+                if (impl instanceof ColumnRefOperator) {
+                    subRefs.remove(impl);
+                }
+                List<Pair<Table, Column>> subColumns = Lists.newArrayList();
+                for (ColumnRefOperator subRef : subRefs) {
+                    subColumns.addAll(ListUtils.emptyIfNull(resolveColumnRefRecursive(subRef, factory, expr)));
+                }
+                return subColumns;
+            }
+        }
+
+        // consult children operators
+        for (OptExpression child : expr.getInputs()) {
+            List<Pair<Table, Column>> children = resolveColumnRefRecursive(ref, factory, child);
+            if (CollectionUtils.isNotEmpty(children)) {
+                return children;
+            }
+        }
+
+        throw new RuntimeException("cannot resolve column ref: " + ref);
     }
 }

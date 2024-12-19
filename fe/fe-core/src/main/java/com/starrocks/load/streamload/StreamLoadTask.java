@@ -24,8 +24,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.Version;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -70,6 +70,8 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.LoadJobWithWarehouse;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -79,6 +81,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -86,7 +89,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 public class StreamLoadTask extends AbstractTxnStateChangeCallback
-        implements Writable, GsonPostProcessable, GsonPreProcessable {
+        implements Writable, GsonPostProcessable, GsonPreProcessable, LoadJobWithWarehouse {
     private static final Logger LOG = LogManager.getLogger(StreamLoadTask.class);
 
     public enum State {
@@ -265,7 +268,30 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.isCommitting = false;
     }
 
-    public void beginTxn(int channelId, int channelNum, TransactionResult resp) {
+    @Override
+    public long getCurrentWarehouseId() {
+        return warehouseId;
+    }
+
+    @Override
+    public boolean isFinal() {
+        return isFinalState();
+    }
+
+    @Override
+    public long getFinishTimestampMs() {
+        return endTimeMs();
+    }
+
+    public void beginTxnFromBackend(TUniqueId requestId, TransactionResult resp) {
+        beginTxn(0, 1, requestId, true, resp);
+    }
+
+    public void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp) {
+        beginTxn(channelId, channelNum, null, false, resp);
+    }
+
+    public void beginTxn(int channelId, int channelNum, TUniqueId requestId, boolean isBackendTxn, TransactionResult resp) {
         long startTimeMs = System.currentTimeMillis();
         boolean exception = false;
         writeLock();
@@ -279,7 +305,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
             switch (this.state) {
                 case BEGIN: {
-                    unprotectedBeginTxn(false);
+                    unprotectedBeginTxn(false, isBackendTxn, requestId);
                     this.state = State.BEFORE_LOAD;
                     this.channels.set(channelId, State.BEFORE_LOAD);
                     this.beforeLoadTimeMs = System.currentTimeMillis();
@@ -635,12 +661,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 return;
             }
             if (this.state != State.PREPARING) {
-                throw new UserException("stream load task " + this.label
+                throw new StarRocksException("stream load task " + this.label
                         + " s state (" + this.state + ") is not preparing, can not prepare txn");
             }
             unprotectedWaitCoordFinish();
             if (!checkDataQuality()) {
-                throw new UserException("abnormal data more than max filter rate, tracking_url: " +
+                throw new StarRocksException("abnormal data more than max filter rate, tracking_url: " +
                         this.trackingUrl);
             }
         } catch (Exception e) {
@@ -687,7 +713,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 label, dbName, tableName, txnId);
     }
 
-    public void commitTxn(TransactionResult resp) throws UserException {
+    public void commitTxn(TransactionResult resp) throws StarRocksException {
         long startTimeMs = System.currentTimeMillis();
         boolean exception = false;
         readLock();
@@ -739,7 +765,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         resp.setOKMsg("stream load " + label + " commit");
     }
 
-    public void manualCancelTask(TransactionResult resp) throws UserException {
+    public void manualCancelTask(TransactionResult resp) throws StarRocksException {
         long startTimeMs = System.currentTimeMillis();
         readLock();
         try {
@@ -765,9 +791,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return new DefaultCoordinator.Factory();
     }
 
-    public void unprotectedExecute(HttpHeaders headers) throws UserException {
+    public void unprotectedExecute(HttpHeaders headers) throws StarRocksException {
         streamLoadParams = StreamLoadKvParams.fromHttpHeaders(headers);
-        streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(loadId, txnId, (int) timeoutMs / 1000, streamLoadParams);
+        streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(
+                loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams);
         if (table == null) {
             getTable();
         }
@@ -795,11 +822,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             this.channelIdToBEHTTPAddress = coord.getChannelIdToBEHTTPMap();
             this.channelIdToBEHTTPPort = coord.getChannelIdToBEPortMap();
         } catch (Exception e) {
-            throw new UserException(e.getMessage());
+            throw new StarRocksException(e.getMessage());
         }
     }
 
-    private void unprotectedFinishStreamLoadChannel(int channelId) throws UserException {
+    private void unprotectedFinishStreamLoadChannel(int channelId) throws StarRocksException {
         TNetworkAddress address = channelIdToBEHTTPPort.get(channelId);
         try {
             TStreamLoadChannel streamLoadChannel = new TStreamLoadChannel();
@@ -816,11 +843,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             LOG.info("finish stream load channel label: {} channel id {}", label, channelId);
         } catch (Exception e) {
-            throw new UserException("failed to send finish stream load channel: " + e.getMessage(), e);
+            throw new StarRocksException("failed to send finish stream load channel: " + e.getMessage(), e);
         }
     }
 
-    private void unprotectedWaitCoordFinish() throws UserException {
+    private void unprotectedWaitCoordFinish() throws StarRocksException {
         try {
             int waitSecond = (int) (getLeftTimeMs() / 1000);
             if (waitSecond <= 0) {
@@ -853,7 +880,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 throw new LoadException("coordinator could not finished before job timeout");
             }
         } catch (Exception e) {
-            throw new UserException(e.getMessage());
+            throw new StarRocksException(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
@@ -904,15 +931,16 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return null;
     }
 
-    public void unprotectedBeginTxn(boolean replay) throws UserException {
+    public void unprotectedBeginTxn(boolean replay, boolean isBackendTxn, TUniqueId requestId) throws StarRocksException {
         this.txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
-                dbId, Lists.newArrayList(tableId), label, null,
+                dbId, Lists.newArrayList(tableId), label, requestId,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
+                isBackendTxn ? TransactionState.LoadJobSourceType.BACKEND_STREAMING
+                    : TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
                 timeoutMs / 1000, warehouseId);
     }
 
-    public void unprotectedPrepareTxn() throws UserException {
+    public void unprotectedPrepareTxn() throws StarRocksException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
         List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(coord.getFailInfos());
         finishPreparingTimeMs = System.currentTimeMillis();
@@ -966,7 +994,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     @Override
-    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         if (!txnOperated) {
             return;
         }
@@ -1011,7 +1039,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         if (!txnOperated) {
             return;
         }
@@ -1128,7 +1156,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
-            throws UserException {
+            throws StarRocksException {
         if (!txnOperated) {
             return;
         }
@@ -1159,6 +1187,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             // sync stream load related query info should unregister here
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     @Override
@@ -1196,6 +1225,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         } finally {
             writeUnlock();
         }
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     @Override

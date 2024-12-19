@@ -71,7 +71,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             " FROM `$catalogName`.`$dbName`.`$tableName` where $partitionPredicate";
 
     private final String catalogName;
-    private final List<String> partitionNames;
+    protected List<String> partitionNames;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
@@ -293,7 +293,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         StatementBase insertStmt = createInsertStmt();
         do {
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
-            StmtExecutor executor = new StmtExecutor(context, insertStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();

@@ -80,10 +80,12 @@ public class TabletTaskExecutor {
             // Compatible with older versions, `Config.max_create_table_timeout_second` is the timeout time for a single index.
             // Here we assume that all partitions have the same number of indexes.
             int maxTimeout = partitionCount * indexCountPerPartition * Config.max_create_table_timeout_second;
+            int maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
+            tasks.forEach(task -> task.setTimeoutMs(maxWaitTimeSeconds * 1000L));
             try {
                 LOG.info("build partitions sequentially, send task one by one, all tasks timeout {}s",
-                        Math.min(timeout, maxTimeout));
-                sendCreateReplicaTasksAndWaitForFinished(tasks, Math.min(timeout, maxTimeout));
+                        maxWaitTimeSeconds);
+                sendCreateReplicaTasksAndWaitForFinished(tasks, maxWaitTimeSeconds);
                 LOG.info("build partitions sequentially, all tasks finished, took {}ms",
                         System.currentTimeMillis() - start);
                 tasks.clear();
@@ -103,6 +105,7 @@ public class TabletTaskExecutor {
         int numIndexes = partitions.stream().mapToInt(
                 partition -> partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size()).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
+        long maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
         boolean enableTabletCreationOptimization = table.isCloudNativeTableOrMaterializedView()
                 && Config.lake_enable_tablet_creation_optimization;
         if (enableTabletCreationOptimization) {
@@ -114,7 +117,6 @@ public class TabletTaskExecutor {
             int numFinishedTasks;
             int numSendedTasks = 0;
             long startTime = System.currentTimeMillis();
-            long maxWaitTimeMs = Math.min(timeout, maxTimeout) * 1000L;
             for (PhysicalPartition partition : partitions) {
                 if (!countDownLatch.getStatus().ok()) {
                     break;
@@ -125,6 +127,10 @@ public class TabletTaskExecutor {
                     List<Long> signatures =
                             taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
                     signatures.add(task.getSignature());
+                    // set timeout to 2 * maxWaitTimeSeconds because this for loop can wait for maxWaitTimeSeconds
+                    // to limit the number of tasks that can be sent at the same time, and outside the loop it can
+                    // wait for maxWaitTimeSeconds again. So the total waiting time is 2 * maxWaitTimeSeconds.
+                    task.setTimeoutMs(maxWaitTimeSeconds * 1000 * 2);
                 }
                 sendCreateReplicaTasks(tasks, countDownLatch);
                 numSendedTasks += tasks.size();
@@ -138,7 +144,7 @@ public class TabletTaskExecutor {
                 while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
                     long currentTime = System.currentTimeMillis();
                     // Add timeout check
-                    if (currentTime > startTime + maxWaitTimeMs) {
+                    if (currentTime > startTime + maxWaitTimeSeconds * 1000) {
                         throw new TimeoutException("Wait in buildPartitionsConcurrently exceeded timeout");
                     }
                     ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
@@ -146,8 +152,8 @@ public class TabletTaskExecutor {
                 }
             }
             LOG.info("build partitions concurrently for {}, waiting for all tasks finish with timeout {}s",
-                    table.getName(), Math.min(timeout, maxTimeout));
-            waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
+                    table.getName(), maxWaitTimeSeconds);
+            waitForFinished(countDownLatch, maxWaitTimeSeconds);
             LOG.info("build partitions concurrently for {}, all tasks finished, took {}ms",
                     table.getName(), System.currentTimeMillis() - start);
 
@@ -167,7 +173,7 @@ public class TabletTaskExecutor {
     }
 
     private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<PhysicalPartition> partitions,
-                                                                  long warehouseId, boolean enableTabletCreationOptimization)
+                                                                   long warehouseId, boolean enableTabletCreationOptimization)
             throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>();
         for (PhysicalPartition partition : partitions) {
@@ -177,27 +183,33 @@ public class TabletTaskExecutor {
         return tasks;
     }
 
-    private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, PhysicalPartition partition,
-                                                                  long warehouseId, boolean enableTabletCreationOptimization)
+    private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
+                                                                   PhysicalPartition physicalPartition,
+                                                                   long warehouseId, boolean enableTabletCreationOptimization)
             throws DdlException {
-        ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) partition.storageReplicaCount());
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, index, warehouseId, enableTabletCreationOptimization));
+        ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) physicalPartition.storageReplicaCount());
+        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+            tasks.addAll(buildCreateReplicaTasks(dbId, table, physicalPartition, index, warehouseId,
+                    enableTabletCreationOptimization));
         }
         return tasks;
     }
 
-    private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, PhysicalPartition partition,
-                                                                  MaterializedIndex index, long warehouseId,
-                                                                  boolean enableTabletCreationOptimization) throws DdlException {
+    private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId,
+                                                                   OlapTable table,
+                                                                   PhysicalPartition physicalPartition,
+                                                                   MaterializedIndex index,
+                                                                   long warehouseId,
+                                                                   boolean enableTabletCreationOptimization) {
         LOG.info("build create replica tasks for index {} db {} table {} partition {}",
-                index, dbId, table.getId(), partition);
+                index, dbId, table.getId(), physicalPartition);
         boolean isCloudNativeTable = table.isCloudNativeTableOrMaterializedView();
         boolean createSchemaFile = true;
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         TTabletType tabletType = isCloudNativeTable ? TTabletType.TABLET_TYPE_LAKE : TTabletType.TABLET_TYPE_DISK;
-        TStorageMedium storageMedium = table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
+        TStorageMedium storageMedium =
+                table.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
         TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                 .setId(indexMeta.getSchemaId())
                 .setVersion(indexMeta.getSchemaVersion())
@@ -232,10 +244,10 @@ public class TabletTaskExecutor {
                         .setNodeId(nodeId)
                         .setDbId(dbId)
                         .setTableId(table.getId())
-                        .setPartitionId(partition.getId())
+                        .setPartitionId(physicalPartition.getId())
                         .setIndexId(index.getId())
                         .setTabletId(tablet.getId())
-                        .setVersion(partition.getVisibleVersion())
+                        .setVersion(physicalPartition.getVisibleVersion())
                         .setStorageMedium(storageMedium)
                         .setEnablePersistentIndex(table.enablePersistentIndex())
                         .setPersistentIndexType(table.getPersistentIndexType())
@@ -268,7 +280,7 @@ public class TabletTaskExecutor {
     }
 
     private static void sendCreateReplicaTasks(List<CreateReplicaTask> tasks,
-                                              MarkedCountDownLatch<Long, Long> countDownLatch) {
+                                               MarkedCountDownLatch<Long, Long> countDownLatch) {
         HashMap<Long, List<AgentTask>> backendToBatchTask = new HashMap<>();
 
         for (CreateReplicaTask task : tasks) {

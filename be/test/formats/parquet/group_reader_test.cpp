@@ -14,12 +14,15 @@
 
 #include "formats/parquet/group_reader.h"
 
+#include <formats/parquet/scalar_column_reader.h>
 #include <gtest/gtest.h>
+#include <testutil/assert.h>
 
 #include <memory>
 
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner.h"
+#include "formats/parquet/column_reader_factory.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 
@@ -35,9 +38,10 @@ public:
 
 class MockColumnReader : public ColumnReader {
 public:
-    MockColumnReader() = default;
-    explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
+    explicit MockColumnReader(tparquet::Type::type type) : ColumnReader(nullptr), _type(type) {}
     ~MockColumnReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
         size_t num_rows = static_cast<size_t>(range.span_size());
@@ -372,6 +376,8 @@ TEST_F(GroupReaderTest, TestInit) {
 
     // init row group reader
     status = group_reader->init();
+    ASSERT_TRUE(status.ok());
+    status = group_reader->prepare();
     // timezone is empty
     ASSERT_FALSE(status.ok());
     //ASSERT_TRUE(status.is_end_of_file());
@@ -413,6 +419,8 @@ TEST_F(GroupReaderTest, TestGetNext) {
 
     // init row group reader
     status = group_reader->init();
+    ASSERT_TRUE(status.ok());
+    status = group_reader->prepare();
     ASSERT_FALSE(status.ok());
 
     // replace column readers
@@ -442,15 +450,39 @@ TEST_F(GroupReaderTest, TestGetNext) {
 TEST_F(GroupReaderTest, ColumnReaderCreateTypeMismatch) {
     ParquetField field;
     field.name = "col0";
-    field.type.type = LogicalType::TYPE_ARRAY;
+    field.type = ColumnType::ARRAY;
 
     TypeDescriptor col_type;
     col_type.type = LogicalType::TYPE_VARCHAR;
 
     ColumnReaderOptions options;
-    Status st = ColumnReader::create(options, &field, col_type, nullptr);
+    auto st = ColumnReaderFactory::create(options, &field, col_type, nullptr);
     ASSERT_FALSE(st.ok()) << st;
-    std::cout << st.message() << "\n";
+    std::cout << st.status().message() << "\n";
+}
+
+TEST_F(GroupReaderTest, FixedValueColumnReaderTest) {
+    auto col1 = std::make_unique<FixedValueColumnReader>(kNullDatum);
+    ASSERT_OK(col1->prepare());
+    col1->get_levels(nullptr, nullptr, nullptr);
+    col1->set_need_parse_levels(false);
+    col1->collect_column_io_range(nullptr, nullptr, ColumnIOType::PAGES, true);
+    SparseRange<uint64_t> sparse_range;
+    col1->select_offset_index(sparse_range, 100);
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::create_varchar_type(100), true);
+    Range<uint64_t> range(0, 100);
+    ASSERT_FALSE(col1->read_range(range, nullptr, column).ok());
+
+    TypeInfoPtr type_info = get_type_info(LogicalType::TYPE_INT);
+    ColumnPredicate* is_null_predicate = _pool.add(new_column_null_predicate(type_info, 1, true));
+    ColumnPredicate* is_not_null_predicate = _pool.add(new_column_null_predicate(type_info, 1, false));
+
+    std::vector<const ColumnPredicate*> predicates;
+    predicates.push_back(is_null_predicate);
+    predicates.push_back(is_not_null_predicate);
+
+    ASSERT_FALSE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::AND, 1, 100).value());
+    ASSERT_TRUE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::OR, 1, 100).value());
 }
 
 } // namespace starrocks::parquet

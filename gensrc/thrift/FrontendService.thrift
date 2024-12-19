@@ -963,6 +963,23 @@ struct TStreamLoadPutResult {
     2: optional InternalService.TExecPlanFragmentParams params
 }
 
+struct TMergeCommitRequest {
+    1: optional string db
+    2: optional string tbl
+    3: optional string user
+    4: optional string passwd
+    5: optional string user_ip
+    6: optional i64 backend_id
+    7: optional string backend_host;
+    8: optional map<string, string> params;
+}
+
+struct TMergeCommitResult {
+    1: optional Status.TStatus status;
+    // only valid for success
+    2: optional string label;
+}
+
 struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
     2: optional map<i32,i64> partitionCmtOffsetTimestamp
@@ -1382,6 +1399,7 @@ struct TCreatePartitionRequest {
     3: optional i64 table_id
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
+    5: optional bool is_temp
 }
 
 struct TCreatePartitionResult {
@@ -1733,6 +1751,53 @@ struct TFeMemoryRes {
     1: optional list<TFeMemoryItem> items
 }
 
+struct TColumnStatsUsageReq {
+    1: optional TAuthInfo auth_info
+    2: optional string table_catalog
+    3: optional string table_database
+    4: optional string table_name
+}
+
+struct TColumnStatsUsage {
+    1: optional string table_catalog
+    2: optional string table_database
+    3: optional string table_name
+    4: optional string column_name
+    5: optional string usage
+    6: optional i64 last_used
+    7: optional i64 created
+}
+
+struct TColumnStatsUsageRes {
+    1: optional list<TColumnStatsUsage> items;
+}
+
+struct TAnalyzeStatusReq {
+    1: optional TAuthInfo auth_info
+    2: optional string table_catalog
+    3: optional string table_database
+    4: optional string table_name
+}
+
+struct TAnalyzeStatusItem {
+    1: optional string id
+    2: optional string catalog_name
+    3: optional string database_name
+    4: optional string table_name
+    5: optional string columns
+    6: optional string type
+    7: optional string schedule
+    8: optional string status
+    9: optional string start_time
+    10: optional string end_time
+    11: optional string properties
+    12: optional string reason
+}
+
+struct TAnalyzeStatusRes {
+    1: optional list<TAnalyzeStatusItem> items
+}
+
 enum TGrantsToType {
     ROLE,
     USER,
@@ -1848,6 +1913,28 @@ struct TGetKeysResponse {
     1: optional list<binary> key_metas;
 }
 
+struct TStartCheckpointRequest {
+    1: optional i64 epoch;
+    2: optional i64 journal_id;
+    3: optional bool is_global_state_mgr;
+}
+
+struct TStartCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TFinishCheckpointRequest {
+    1: optional i64 journal_id;
+    2: optional string node_name;
+    3: optional bool is_success;
+    4: optional string message;
+    5: optional bool is_global_state_mgr;
+}
+
+struct TFinishCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1904,6 +1991,8 @@ service FrontendService {
 
     TStreamLoadPutResult streamLoadPut(1: TStreamLoadPutRequest request)
 
+    TMergeCommitResult requestMergeCommit(1: TMergeCommitRequest request)
+
     Status.TStatus snapshotLoaderReport(1: TSnapshotLoaderReportRequest request)
 
     TRefreshTableResponse refreshTable(1:TRefreshTableRequest request)
@@ -1943,6 +2032,11 @@ service FrontendService {
     // sys.fe_memory_usage
     TFeMemoryRes listFeMemoryUsage(1: TFeMemoryReq request)
 
+    // information_schema.column_stats_uage
+    TColumnStatsUsageRes getColumnStatsUsage(1: TColumnStatsUsageReq request)
+    // information_schema.analyze_status
+    TAnalyzeStatusRes getAnalyzeStatus(1: TAnalyzeStatusReq request)
+
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)
     TReleaseSlotResponse releaseSlot(1: TReleaseSlotRequest request)
@@ -1961,5 +2055,9 @@ service FrontendService {
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
 
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
+
+    TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
+
+    TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
 }
 

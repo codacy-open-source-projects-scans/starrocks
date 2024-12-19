@@ -62,6 +62,7 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeRollupJob;
 import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
@@ -69,6 +70,21 @@ import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.authorization.CatalogPEntryObject;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.FunctionPEntryObject;
+import com.starrocks.authorization.GlobalFunctionPEntryObject;
+import com.starrocks.authorization.MaterializedViewPEntryObject;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PipePEntryObject;
+import com.starrocks.authorization.PolicyFCEntryObject;
+import com.starrocks.authorization.ResourceGroupPEntryObject;
+import com.starrocks.authorization.ResourcePEntryObject;
+import com.starrocks.authorization.StorageVolumePEntryObject;
+import com.starrocks.authorization.TablePEntryObject;
+import com.starrocks.authorization.UserPEntryObject;
+import com.starrocks.authorization.ViewPEntryObject;
+import com.starrocks.authorization.WarehousePEntryObject;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -151,21 +167,6 @@ import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
-import com.starrocks.privilege.CatalogPEntryObject;
-import com.starrocks.privilege.DbPEntryObject;
-import com.starrocks.privilege.FunctionPEntryObject;
-import com.starrocks.privilege.GlobalFunctionPEntryObject;
-import com.starrocks.privilege.MaterializedViewPEntryObject;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PipePEntryObject;
-import com.starrocks.privilege.PolicyFCEntryObject;
-import com.starrocks.privilege.ResourceGroupPEntryObject;
-import com.starrocks.privilege.ResourcePEntryObject;
-import com.starrocks.privilege.StorageVolumePEntryObject;
-import com.starrocks.privilege.TablePEntryObject;
-import com.starrocks.privilege.UserPEntryObject;
-import com.starrocks.privilege.ViewPEntryObject;
-import com.starrocks.privilege.WarehousePEntryObject;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
@@ -264,6 +265,7 @@ public class GsonUtils {
                     .registerSubtype(OnlineOptimizeJobV2.class, "OnlineOptimizeJobV2")
                     .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                     .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
+                    .registerSubtype(LakeRollupJob.class, "LakeRollupJob")
                     .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob");
 
     // runtime adapter for class "LoadJobStateUpdateInfo"

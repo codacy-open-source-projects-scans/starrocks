@@ -657,6 +657,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Specifies whether asynchronous I/O is enabled for the FE node.
 - Introduced in: -
 
+##### mysql_service_nio_enable_keep_alive
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Enable TCP Keep-Alive for MySQL connections. Useful for long-idled connections behind load balancers.
+- Introduced in: -
+
 ##### mysql_service_io_threads_num
 
 - Default: 4
@@ -2765,6 +2774,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
+
+##### max_automatic_partition_number
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of automatically created partitions.
+- Introduced in: v3.1
 
 ##### auto_partition_max_creation_number_per_load
 

@@ -26,10 +26,12 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "formats/parquet/metadata.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "io/shared_buffered_input_stream.h"
 #include "storage/column_predicate.h"
+#include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
 #include "types/logical_type.h"
 
@@ -46,11 +48,11 @@ class ColumnPredicate;
 class ExprContext;
 class NullableColumn;
 class TIcebergSchemaField;
+struct TypeDescriptor;
 
 namespace parquet {
 struct ParquetField;
 } // namespace parquet
-struct TypeDescriptor;
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -63,6 +65,7 @@ struct ColumnReaderOptions {
     RandomAccessFile* file = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
     uint64_t first_row_index = 0;
+    const FileMetaData* file_meta_data = nullptr;
 };
 
 class StoredColumnReader;
@@ -86,26 +89,9 @@ public:
 
 class ColumnReader {
 public:
-    // TODO(zc): review this,
-    // create a column reader
-    static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                         std::unique_ptr<ColumnReader>* output);
-
-    // Create with iceberg schema
-    static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                         const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output);
-
-    // for struct type without schema change
-    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                  bool case_sensitive, std::vector<int32_t>& pos);
-
-    // for schema changed
-    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                  bool case_sensitive, const TIcebergSchemaField* iceberg_schema_field,
-                                                  std::vector<int32_t>& pos,
-                                                  std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield);
-
+    explicit ColumnReader(const ParquetField* parquet_field) : _parquet_field(parquet_field) {}
     virtual ~ColumnReader() = default;
+    virtual Status prepare() = 0;
 
     virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) = 0;
 
@@ -139,9 +125,27 @@ public:
     virtual void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                          int64_t* end_offset, ColumnIOType type, bool active) = 0;
 
-    virtual const tparquet::ColumnChunk* get_chunk_metadata() { return nullptr; }
+    // For field which type is complex, the filed physical_column_index in file meta is not same with the column index
+    // in row_group's column metas
+    // For example:
+    // table schema :
+    //  -- col_tinyint tinyint
+    //  -- col_struct  struct
+    //  ----- name     string
+    //  ----- age      int
+    // file metadata schema :
+    //  -- ParquetField(name=col_tinyint, physical_column_index=0)
+    //  -- ParquetField(name=col_struct,physical_column_index=0,
+    //                  children=[ParquetField(name=name, physical_column_index=1),
+    //                            ParquetField(name=age, physical_column_index=2)])
+    // row group column metas:
+    //  -- ColumnMetaData(path_in_schema=[col_tinyint])
+    //  -- ColumnMetaData(path_in_schema=[col_struct, name])
+    //  -- ColumnMetaData(path_in_schema=[col_struct, age])
+    // So for complex type, there isn't exist ColumnChunkMetaData
+    virtual const tparquet::ColumnChunk* get_chunk_metadata() const { return nullptr; }
 
-    virtual const ParquetField* get_column_parquet_field() { return nullptr; }
+    const ParquetField* get_column_parquet_field() const { return _parquet_field; }
 
     virtual StatusOr<tparquet::OffsetIndex*> get_offset_index(const uint64_t rg_first_row) {
         return Status::NotSupported("get_offset_index is not supported");
@@ -149,9 +153,28 @@ public:
 
     virtual void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) = 0;
 
+    // Return true means selected, return false means not selected
+    virtual StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                     CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                                     const uint64_t rg_num_rows) const {
+        // not implemented, select the whole row group by default
+        return true;
+    }
+
+    // return true means page index filter happened
+    // return false means no page index filter happened
+    virtual StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                      SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                                      const uint64_t rg_first_row, const uint64_t rg_num_rows) {
+        DCHECK(row_ranges->empty());
+        return false;
+    }
+
 private:
-    static bool _has_valid_subfield_column_reader(
-            const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
+    // _parquet_field is generated by parquet format, so ParquetField's children order may different from ColumnReader's children.
+    const ParquetField* _parquet_field = nullptr;
 };
+
+using ColumnReaderPtr = std::unique_ptr<ColumnReader>;
 
 } // namespace starrocks::parquet

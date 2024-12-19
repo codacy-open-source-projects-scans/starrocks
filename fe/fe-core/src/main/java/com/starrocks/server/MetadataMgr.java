@@ -31,6 +31,7 @@ import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -43,9 +44,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableVersion;
@@ -79,15 +81,19 @@ import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -378,7 +384,7 @@ public class MetadataMgr {
         }
     }
 
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
@@ -611,16 +617,13 @@ public class MetadataMgr {
         return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
     }
 
-    public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
-        return listPartitionNames(catalogName, dbName, tableName, TableVersionRange.empty());
-    }
-
-    public List<String> listPartitionNames(String catalogName, String dbName, String tableName, TableVersionRange versionRange) {
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                           ConnectorMetadatRequestContext requestContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().listPartitionNames(dbName, tableName, versionRange).forEach(partitionNames::add);
+                connectorMetadata.get().listPartitionNames(dbName, tableName, requestContext).forEach(partitionNames::add);
             } catch (Exception e) {
                 LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
                 throw e;
@@ -654,20 +657,6 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
-    public List<PartitionKey> getPrunedPartitions(String catalogName, Table table, ScalarOperator predicate,
-                                                  long limit, TableVersionRange version) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        if (connectorMetadata.isPresent()) {
-            try {
-                return connectorMetadata.get().getPrunedPartitions(table, predicate, limit, version);
-            } catch (Exception e) {
-                LOG.error("Failed to getPrunedPartitions on [{}.{}]", catalogName, table, e);
-                throw e;
-            }
-        }
-        return new ArrayList<>();
-    }
-
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(columns.keySet());
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
@@ -695,7 +684,9 @@ public class MetadataMgr {
             if (connectorTableColumnStats != null) {
                 statistics.addColumnStatistic(columnRef, connectorTableColumnStats.getColumnStatistic());
                 if (!connectorTableColumnStats.isUnknown()) {
-                    statistics.setOutputRowCount(connectorTableColumnStats.getRowCount());
+                    double rowCount = Double.isNaN(statistics.getOutputRowCount()) ? connectorTableColumnStats.getRowCount()
+                            : Math.max(statistics.getOutputRowCount(), connectorTableColumnStats.getRowCount());
+                    statistics.setOutputRowCount(rowCount);
                 }
             }
         }
@@ -773,6 +764,19 @@ public class MetadataMgr {
             }
         }
         return new ArrayList<>();
+    }
+
+    public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getDeleteFiles(table, snapshotId, predicate, content);
+            } catch (Exception e) {
+                LOG.error("Failed to get delete files on catalog [{}], table [{}]", table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return new HashSet<>();
     }
 
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {

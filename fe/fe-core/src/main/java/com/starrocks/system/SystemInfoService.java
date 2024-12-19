@@ -56,8 +56,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -131,11 +131,6 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public void addComputeNodes(AddComputeNodeClause addComputeNodeClause)
             throws DdlException {
-
-        for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
-            checkSameNodeExist(pair.first, pair.second);
-        }
-
         for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
             addComputeNode(pair.first, pair.second, addComputeNodeClause.getWarehouse());
         }
@@ -169,7 +164,9 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     // Final entry of adding compute node
-    private void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
+    public void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
+        checkSameNodeExist(host, heartbeatPort);
+
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
@@ -267,6 +264,9 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ShowResultSet modifyBackendHost(ModifyBackendClause modifyBackendClause) throws DdlException {
+        if (RunMode.isSharedDataMode()) {
+            throw new DdlException("modify backend host is not supported in shared-data cluster.");
+        }
         String willBeModifiedHost = modifyBackendClause.getSrcHost();
         String fqdn = modifyBackendClause.getDestHost();
         List<Backend> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);
@@ -778,7 +778,7 @@ public class SystemInfoService implements GsonPostProcessable {
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                             .getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
-                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+                throw new StarRocksException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
             }
         }
         if (computeNode.getBrpcPort() < 0) {
@@ -879,57 +879,37 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<Long> getComputeNodeIds(boolean needAlive) {
-        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNodeRef.keySet());
         if (needAlive) {
-            Iterator<Long> iter = computeNodeIds.iterator();
-            while (iter.hasNext()) {
-                ComputeNode computeNode = this.getComputeNode(iter.next());
-                if (computeNode == null || !computeNode.isAlive()) {
-                    iter.remove();
-                }
-            }
+            return idToComputeNodeRef.entrySet().stream()
+                    .filter(entry -> entry.getValue().isAlive())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else {
+            return Lists.newArrayList(idToComputeNodeRef.keySet());
         }
-        return computeNodeIds;
     }
 
     public List<Long> getBackendIds(boolean needAlive) {
-        List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
         if (needAlive) {
-            Iterator<Long> iter = backendIds.iterator();
-            while (iter.hasNext()) {
-                Backend backend = this.getBackend(iter.next());
-                if (backend == null || !backend.isAlive()) {
-                    iter.remove();
-                }
-            }
+            return idToBackendRef.entrySet().stream()
+                    .filter(entry -> entry.getValue().isAlive())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else {
+            return Lists.newArrayList(idToBackendRef.keySet());
         }
-        return backendIds;
     }
 
     public List<Long> getDecommissionedBackendIds() {
-        List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
-
-        Iterator<Long> iter = backendIds.iterator();
-        while (iter.hasNext()) {
-            Backend backend = this.getBackend(iter.next());
-            if (backend == null || !backend.isDecommissioned()) {
-                iter.remove();
-            }
-        }
-        return backendIds;
+        return idToBackendRef.entrySet().stream()
+                .filter(entry -> entry.getValue().isDecommissioned())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
     }
 
     public List<Long> getAvailableBackendIds() {
-        List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
-
-        Iterator<Long> iter = backendIds.iterator();
-        while (iter.hasNext()) {
-            Backend backend = this.getBackend(iter.next());
-            if (backend == null || !backend.isAvailable()) {
-                iter.remove();
-            }
-        }
-        return backendIds;
+        return idToBackendRef.entrySet().stream().filter(entry -> entry.getValue().isAvailable()).map(
+                Map.Entry::getKey).collect(Collectors.toList());
     }
 
     public List<Long> getAvailableComputeNodeIds() {

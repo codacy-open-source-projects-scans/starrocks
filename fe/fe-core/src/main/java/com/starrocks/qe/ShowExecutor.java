@@ -47,6 +47,17 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ActionSet;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.CatalogPEntryObject;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeEntry;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.TablePEntryObject;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -119,17 +130,6 @@ import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ActionSet;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.CatalogPEntryObject;
-import com.starrocks.privilege.DbPEntryObject;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeEntry;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
 import com.starrocks.proto.PFailPointTriggerMode;
@@ -360,7 +360,7 @@ public class ShowExecutor {
                         }
 
                         materializedViews.add(mvTable);
-                    } else if (Table.TableType.OLAP == table.getType()) {
+                    } else if (table.isOlapOrCloudNativeTable()) {
                         OlapTable olapTable = (OlapTable) table;
                         List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
                         long baseIdx = olapTable.getBaseIndexId();
@@ -576,7 +576,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowTableStatusStatement(ShowTableStatusStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDb());
             ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
             if (db != null) {
                 Locker locker = new Locker();
@@ -593,8 +593,8 @@ public class ShowExecutor {
                         }
 
                         try {
-                            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
-                                    context.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
+                                    context.getCurrentRoleIds(), db.getFullName(), table);
                         } catch (AccessDeniedException e) {
                             continue;
                         }
@@ -1812,6 +1812,15 @@ public class ShowExecutor {
                 List<String> info = backupJob.getInfo();
                 infos.add(info);
             }
+
+            // backup info for external catalog
+            AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(-1L);
+            if (jobI != null && jobI instanceof BackupJob) {
+                BackupJob backupJob = (BackupJob) jobI;
+                List<String> info = backupJob.getInfo();
+                infos.add(info);
+            }
+
             return new ShowResultSet(statement.getMetaData(), infos);
         }
 
@@ -1841,6 +1850,15 @@ public class ShowExecutor {
                 List<String> info = restoreJob.getInfo();
                 infos.add(info);
             }
+
+            // restore info for external catalog
+            AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(-1L);
+            if (jobI != null && jobI instanceof RestoreJob) {
+                RestoreJob restoreJob = (RestoreJob) jobI;
+                List<String> info = restoreJob.getInfo();
+                infos.add(info);
+            }
+
             return new ShowResultSet(statement.getMetaData(), infos);
         }
 
@@ -2159,7 +2177,11 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+            String catalogName = statement.getTableName().getCatalog();
+            if (catalogName == null) {
+                catalogName = context.getCurrentCatalog();
+            }
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, statement.getDbName());
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
             Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
             if (table == null) {
@@ -2849,7 +2871,7 @@ public class ShowExecutor {
             // rows
             if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
                 Partition partition = olapTable.getPartitions().iterator().next();
-                MaterializedIndex index = partition.getIndex(mvId);
+                MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(mvId);
                 mvStatus.setRows(index.getRowCount());
             } else {
                 mvStatus.setRows(0L);

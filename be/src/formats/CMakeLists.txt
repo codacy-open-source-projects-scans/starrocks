@@ -56,6 +56,7 @@ add_library(Formats STATIC
         parquet/column_chunk_reader.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
+        parquet/column_reader_factory.cpp
         parquet/scalar_column_reader.cpp
         parquet/complex_column_reader.cpp
         parquet/encoding.cpp
@@ -77,6 +78,7 @@ add_library(Formats STATIC
         parquet/column_chunk_writer.cpp
         parquet/column_read_order_ctx.cpp
         parquet/statistics_helper.cpp
+        parquet/zone_map_filter_evaluator.h
         disk_range.hpp
         )
 

@@ -37,6 +37,7 @@ package com.starrocks.alter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -47,7 +48,6 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
@@ -57,7 +57,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -75,7 +75,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -168,7 +167,7 @@ public class AlterJobMgr {
                 throw new MetaNotFoundException("Materialized view " + stmt.getMvName() + " is not found");
             }
             // check table type
-            if (table.getType() != TableType.OLAP) {
+            if (!table.isOlapOrCloudNativeTable()) {
                 throw new DdlException(
                         "Do not support non-OLAP table [" + table.getName() + "] when drop materialized view");
             }
@@ -526,7 +525,7 @@ public class AlterJobMgr {
             view.setInlineViewDefWithSqlMode(inlineViewDef, alterViewInfo.getSqlMode());
             try {
                 view.init();
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 throw new AlterJobException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
@@ -624,5 +623,12 @@ public class AlterJobMgr {
                 LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
             }
         });
+    }
+
+    public Map<Long, Long> getRunningAlterJobCount() {
+        Map<Long, Long> mv = materializedViewHandler.getRunningAlterJobCount();
+        Map<Long, Long> sc = schemaChangeHandler.getRunningAlterJobCount();
+        sc.forEach((key, value) -> mv.merge(key, value, Long::sum));
+        return mv;
     }
 }
