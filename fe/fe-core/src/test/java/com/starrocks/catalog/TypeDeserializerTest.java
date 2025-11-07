@@ -25,6 +25,16 @@ import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.TypeSerializer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -337,7 +347,7 @@ public class TypeDeserializerTest {
             Type type = TypeDeserializer.fromThrift(typeDesc);
 
             Assertions.assertTrue(type.isScalarType());
-            Assertions.assertEquals(PrimitiveType.fromThrift(primitiveType),
+            Assertions.assertEquals(TypeDeserializer.fromThrift(primitiveType),
                     ((ScalarType) type).getPrimitiveType());
         }
     }
@@ -592,7 +602,7 @@ public class TypeDeserializerTest {
             Type type = TypeDeserializer.fromProtobuf(typeDesc);
 
             Assertions.assertTrue(type.isScalarType());
-            // Note: ScalarType.createType(PScalarType) method handles the conversion
+            // Note: TypeFactory.createType(PScalarType) method handles the conversion
         }
     }
 
@@ -741,16 +751,16 @@ public class TypeDeserializerTest {
                 Type.INT,
                 Type.BIGINT,
                 Type.DOUBLE,
-                ScalarType.createVarcharType(255), // Use explicit length for VARCHAR
-                ScalarType.createCharType(10),
-                ScalarType.createVarcharType(255),
-                ScalarType.createDecimalV2Type(10, 4),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6),
+                TypeFactory.createVarcharType(255), // Use explicit length for VARCHAR
+                TypeFactory.createCharType(10),
+                TypeFactory.createVarcharType(255),
+                TypeFactory.createDecimalV2Type(10, 4),
+                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6),
                 new ArrayType(Type.INT),
-                new MapType(ScalarType.createVarcharType(100), Type.BIGINT), // Use explicit length for VARCHAR key
+                new MapType(TypeFactory.createVarcharType(100), Type.BIGINT), // Use explicit length for VARCHAR key
                 new StructType(Lists.newArrayList(
                         new StructField("f1", Type.INT),
-                        new StructField("f2", ScalarType.createVarcharType(200), "test comment") // Use explicit length
+                        new StructField("f2", TypeFactory.createVarcharType(200), "test comment") // Use explicit length
                 ))
         };
 

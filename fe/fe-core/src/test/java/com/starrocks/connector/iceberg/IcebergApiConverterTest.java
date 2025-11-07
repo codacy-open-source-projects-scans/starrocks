@@ -18,13 +18,7 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -33,6 +27,12 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
@@ -85,16 +85,16 @@ public class IcebergApiConverterTest {
         int scale = 5;
         org.apache.iceberg.types.Type icebergType = Types.DecimalType.of(precision, scale);
         Type resType = fromIcebergType(icebergType);
-        assertEquals(resType, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, scale));
+        assertEquals(resType, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, scale));
         resType = fromIcebergType(Types.DecimalType.of(10, scale));
-        assertEquals(resType, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, scale));
+        assertEquals(resType, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, scale));
         resType = fromIcebergType(Types.DecimalType.of(19, scale));
-        assertEquals(resType, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 19, scale));
+        assertEquals(resType, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 19, scale));
     }
 
     @Test
     public void testString() {
-        Type stringType = ScalarType.createDefaultCatalogString();
+        Type stringType = TypeFactory.createDefaultCatalogString();
         org.apache.iceberg.types.Type icebergType = Types.StringType.get();
         Type resType = fromIcebergType(icebergType);
         assertEquals(resType, stringType);
@@ -110,17 +110,17 @@ public class IcebergApiConverterTest {
     @Test
     public void testArray() {
         assertEquals(fromIcebergType(Types.ListType.ofRequired(136, Types.IntegerType.get())),
-                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+                new ArrayType(TypeFactory.createType(PrimitiveType.INT)));
         assertEquals(fromIcebergType(Types.ListType.ofRequired(136,
                         Types.ListType.ofRequired(136, Types.IntegerType.get()))),
-                new ArrayType(new ArrayType(ScalarType.createType(PrimitiveType.INT))));
+                new ArrayType(new ArrayType(TypeFactory.createType(PrimitiveType.INT))));
     }
 
     @Test
     public void testVariant() {
         Type variantType = fromIcebergType(Types.VariantType.get());
         Assertions.assertTrue(variantType.isVariantType());
-        Assertions.assertEquals(ScalarType.createType(PrimitiveType.VARIANT), variantType);
+        Assertions.assertEquals(TypeFactory.createType(PrimitiveType.VARIANT), variantType);
     }
 
     @Test
@@ -154,7 +154,7 @@ public class IcebergApiConverterTest {
                 Types.StringType.get(), Types.IntegerType.get());
         Type resType = fromIcebergType(icebergType);
         assertEquals(resType,
-                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.createType(PrimitiveType.INT)));
+                new MapType(TypeFactory.createDefaultCatalogString(), TypeFactory.createType(PrimitiveType.INT)));
     }
 
     @Test
@@ -326,7 +326,7 @@ public class IcebergApiConverterTest {
 
     @Test
     public void testTime() {
-        Type timeType = ScalarType.createType(PrimitiveType.TIME);
+        Type timeType = TypeFactory.createType(PrimitiveType.TIME);
         org.apache.iceberg.types.Type icebergType = Types.TimeType.get();
         Type resType = fromIcebergType(icebergType);
         assertEquals(resType, timeType);
@@ -542,29 +542,29 @@ public class IcebergApiConverterTest {
     @Test
     public void testIcebergColumnType() {
         org.apache.iceberg.types.Type type;
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.INT));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.INT));
         assertEquals(org.apache.iceberg.types.Type.TypeID.INTEGER, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.BOOLEAN));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.BOOLEAN));
         assertEquals(org.apache.iceberg.types.Type.TypeID.BOOLEAN, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.TINYINT));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.TINYINT));
         assertEquals(org.apache.iceberg.types.Type.TypeID.INTEGER, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.DECIMAL64));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.DECIMAL64));
         assertEquals(org.apache.iceberg.types.Type.TypeID.DECIMAL, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.BIGINT));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.BIGINT));
         assertEquals(org.apache.iceberg.types.Type.TypeID.LONG, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.DOUBLE));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.DOUBLE));
         assertEquals(org.apache.iceberg.types.Type.TypeID.DOUBLE, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.FLOAT));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.FLOAT));
         assertEquals(org.apache.iceberg.types.Type.TypeID.FLOAT, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.DATE));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.DATE));
         assertEquals(org.apache.iceberg.types.Type.TypeID.DATE, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.DATETIME));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.DATETIME));
         assertEquals(org.apache.iceberg.types.Type.TypeID.TIMESTAMP, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.TIME));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.TIME));
         assertEquals(org.apache.iceberg.types.Type.TypeID.TIME, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.VARCHAR));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.VARCHAR));
         assertEquals(org.apache.iceberg.types.Type.TypeID.STRING, type.typeId());
-        type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.VARBINARY));
+        type = IcebergApiConverter.toIcebergColumnType(TypeFactory.createType(PrimitiveType.VARBINARY));
         assertEquals(org.apache.iceberg.types.Type.TypeID.BINARY, type.typeId());
     }
 

@@ -17,10 +17,10 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Objects;
@@ -117,6 +117,6 @@ public class SubfieldExpr extends Expr {
         if (children.get(0) instanceof SlotRef) {
             return ((SlotRef) children.get(0)).getColumnName();
         }
-        return children.get(0).toSql();
+        return ExprToSql.toSql(children.get(0));
     }
 }

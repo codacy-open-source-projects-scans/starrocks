@@ -26,12 +26,11 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
@@ -68,6 +67,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -667,7 +667,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                         // we only need rewrite TFunction
                         Type[] newTypes = new Type[] {ID_TYPE};
                         AggregateFunction newFunction =
-                                (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
+                                (AggregateFunction) ExprUtils.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                         ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
                         CallOperator newCall = new CallOperator(oldCall.getFnName(), newFunction.getReturnType(),
@@ -681,7 +681,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                         List<ScalarOperator> newArguments = Collections.singletonList(dictColumn);
                         Type[] newTypes = newArguments.stream().map(ScalarOperator::getType).toArray(Type[]::new);
                         AggregateFunction newFunction =
-                                (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
+                                (AggregateFunction) ExprUtils.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                         Type newReturnType;
 

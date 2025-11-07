@@ -36,7 +36,6 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -55,6 +54,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 import mockit.Mocked;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.Assertions;
@@ -86,7 +86,7 @@ public class SetStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         Assertions.assertEquals("times", ((UserVariable) stmt.getSetListItems().get(0)).getVariable());
-        Assertions.assertEquals("100", ((UserVariable) stmt.getSetListItems().get(0)).getEvaluatedExpression().toSql());
+        Assertions.assertEquals("100", ExprToSql.toSql(((UserVariable) stmt.getSetListItems().get(0)).getEvaluatedExpression()));
         Assertions.assertTrue(stmt.getSetListItems().get(1) instanceof SetNamesVar);
         Assertions.assertEquals("utf8", ((SetNamesVar) stmt.getSetListItems().get(1)).getCharset());
     }

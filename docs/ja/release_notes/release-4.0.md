@@ -4,6 +4,12 @@ displayed_sidebar: docs
 
 # StarRocks version 4.0
 
+:::warning
+
+StarRocks を v4.0 にアップグレードした後、v3.5.0 および v3.5.1 にダウングレードしないでください。そうするとメタデータの非互換性が発生し、FE がクラッシュする可能性があります。これらの問題を回避するには、クラスタを v3.5.2 以降にダウングレードする必要があります。
+
+:::
+
 ## 4.0.0
 
 リリース日：2025年10月17日
@@ -38,7 +44,7 @@ displayed_sidebar: docs
 
 ### ストレージ最適化とクラスタ管理
 
-- 共有データクラスタのクラウドネイティブテーブルにファイルバンドル（File Bundling）最適化を導入。ロード、Compaction、Publish 操作によって生成されるデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減。[#58316](https://github.com/StarRocks/starrocks/issues/58316)
+- 共有データクラスタのクラウドネイティブテーブルにファイルバンドル（File Bundling）最適化を導入。ロード、Compaction、Publish 操作によって生成されるデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減。ファイルバンドリングは、v4.0 以降で作成されたテーブルに対してデフォルトで有効化されています。[#58316](https://github.com/StarRocks/starrocks/issues/58316)
 - 複数テーブル間の Write-Write トランザクション（Multi-Table Write-Write Transaction）をサポートし、INSERT、UPDATE、DELETE 操作のアトミックコミットを制御可能。Stream Load および INSERT INTO インターフェイスをサポートし、ETL やリアルタイム書き込みシナリオにおけるクロステーブルの一貫性を保証。[#61362](https://github.com/StarRocks/starrocks/issues/61362)
 - Routine Load で Kafka 4.0 をサポート。
 - 共有なしクラスタの主キーテーブルに対する全文インバーテッドインデックスをサポート。

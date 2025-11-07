@@ -69,6 +69,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -167,7 +168,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 ParseNode mvDefinedQueryParseNode = materializedView.getDefineQueryParseNode();
                 if (mvDefinedQueryParseNode != null && (mvDefinedQueryParseNode instanceof QueryStatement)) {
                     QueryStatement queryStatement = (QueryStatement) mvDefinedQueryParseNode;
-                    IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, queryStatement);
+                    IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, null, queryStatement);
 
                     Optional<IVMAnalyzer.IVMAnalyzeResult> result = Optional.empty();
                     try {
@@ -626,7 +627,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 TaskBuilder.getMvTaskName(materializedView.getId()));
         if (currentTask != null) {
             currentTask.setDefinition(materializedView.getTaskDefinition());
-            currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }
 
@@ -799,7 +799,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                 String refColName = refColumn.getColumnName();
                                 if (modifiedColumns.contains(refColName)) {
                                     String defineExprSql = rollupCol.getDefineExpr() == null ? "" :
-                                            rollupCol.getDefineExpr().toSql();
+                                            ExprToSql.toSql(rollupCol.getDefineExpr());
                                     throw new DdlException(String.format("Can not drop/modify the column %s, " +
                                                     "because the column is used in the related rollup %s " +
                                                     "with the define expr:%s, please drop the rollup index first.",
@@ -816,7 +816,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     for (SlotRef refColumn : whereSlots) {
                         String colName = refColumn.getColumnName();
                         if (modifiedColumns.contains(colName)) {
-                            String whereExprSql = whereExpr.toSql();
+                            String whereExprSql = ExprToSql.toSql(whereExpr);
                             throw new DdlException(String.format("Can not drop/modify the column %s, " +
                                             "because the column is used in the related rollup %s " +
                                             "with the where expr:%s, please drop the rollup index first.",

@@ -52,12 +52,15 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -88,6 +91,8 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -221,7 +226,6 @@ public class MvRewritePreprocessor {
                         sessionVariable.getOptimizerMaterializedViewTimeLimitMillis()),
                 Pair.create("materialized_view_join_same_table_permutation_limit",
                         sessionVariable.getMaterializedViewJoinSameTablePermutationLimit()),
-                Pair.create("analyze_mv", sessionVariable.getAnalyzeForMV()),
                 Pair.create("query_excluding_mv_names", sessionVariable.getQueryExcludingMVNames()),
                 Pair.create("query_including_mv_names", sessionVariable.getQueryIncludingMVNames()),
                 Pair.create("cbo_materialized_view_rewrite_rule_output_limit",
@@ -333,13 +337,18 @@ public class MvRewritePreprocessor {
     }
 
     private static MaterializedView copyOnlyMaterializedView(MaterializedView mv) {
-        // TODO: add read lock?
         // Query will not lock dbs in the optimizer stage, so use a shallow copy of mv to avoid
         // metadata race for different operations.
         // Ensure to re-optimize if the mv's version has changed after the optimization.
-        MaterializedView copiedMV = new MaterializedView();
-        mv.copyOnlyForQuery(copiedMV);
-        return copiedMV;
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ);
+        try {
+            MaterializedView copiedMV = new MaterializedView();
+            mv.copyOnlyForQuery(copiedMV);
+            return copiedMV;
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ);
+        }
     }
 
     @VisibleForTesting
@@ -749,7 +758,7 @@ public class MvRewritePreprocessor {
                            MvUpdateInfo mvUpdateInfo) {
         MaterializedView mv = mvWithPlanContext.getMV();
         MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
-        Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+        PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
         if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
             return;
         }
@@ -757,7 +766,7 @@ public class MvRewritePreprocessor {
             logMVPrepare(tracers, connectContext, mv, "MV {} has no partitions to refresh", mv.getName());
         } else {
             logMVPrepare(tracers, mv, "MV' partitions to refresh(size: {}): {}", partitionNamesToRefresh.size(),
-                    MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
+                    partitionNamesToRefresh);
         }
 
         MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
@@ -805,59 +814,62 @@ public class MvRewritePreprocessor {
         logMVPrepare(connectContext, "Processing {} MVs with individual timeout of {} ms each", mvInfos.size(),
                 individualTimeoutMs);
         
+        // Use thread-safe collections for tracking results from async operations
         List<CompletableFuture<Void>> futures = Lists.newArrayListWithExpectedSize(mvInfos.size());
-        List<String> timeoutMvNames = Lists.newArrayList();
-        List<String> failedMvNames = Lists.newArrayList();
+        Set<String> timeoutMvNames = ConcurrentHashMap.newKeySet();
+        Set<String> failedMvNames = ConcurrentHashMap.newKeySet();
         
-        // Create futures for each MV
+        // Create futures for each MV - don't handle exceptions here, handle them after get()
         for (Pair<MaterializedViewWrapper, MvUpdateInfo> mvInfo : mvInfos) {
-            MaterializedView mv = mvInfo.first.getMV();
             CompletableFuture<Void> future = CompletableFuture.supplyAsync(
                     () -> {
                         prepareMV(tracers, queryTables, mvInfo.first, mvInfo.second);
                         return null;
-                    }, exec)
-                    .thenAccept(result -> {
-                        // Success case - result is already handled in prepareMV
-                    })
-                    .exceptionally(e -> {
-                        logMVPrepare(connectContext, "MV {} prepare failed: {}", mv.getName(), DebugUtil.getStackTrace(e));
-                        LOG.warn("Failed to prepare MV {}: {}", mv.getName(), e);
-                        failedMvNames.add(mv.getName());
-                        return null;
-                    });
+                    }, exec);
             
             futures.add(future);
         }
         
-        // Process each future with individual timeout
+        // Wait for each future with individual timeout and handle results
         for (int i = 0; i < futures.size(); i++) {
             CompletableFuture<Void> future = futures.get(i);
             MaterializedView mv = mvInfos.get(i).first.getMV();
+            String mvName = mv.getName();
             
             try {
                 future.get(individualTimeoutMs, TimeUnit.MILLISECONDS);
+                // Success - no action needed
             } catch (TimeoutException e) {
-                LOG.warn("MV {} preparation timeout after {} ms", mv.getName(), individualTimeoutMs);
-                timeoutMvNames.add(mv.getName());
-                logMVPrepare("MV {} preparation timed out after {} ms", mv.getName(), individualTimeoutMs);
-                // Don't throw exception, continue with other MVs
+                LOG.warn("MV {} preparation timeout after {} ms", mvName, individualTimeoutMs);
+                timeoutMvNames.add(mvName);
+                logMVPrepare(connectContext, "MV {} preparation timed out after {} ms", mvName, individualTimeoutMs);
+                // Cancel the future to stop processing
+                future.cancel(true);
             } catch (InterruptedException e) {
-                LOG.warn("MV {} preparation interrupted", mv.getName());
+                LOG.warn("MV {} preparation interrupted", mvName);
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("MV preparation interrupted", e);
+            } catch (ExecutionException e) {
+                // Unwrap the actual cause from ExecutionException
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                LOG.warn("MV {} preparation failed with exception", mvName, cause);
+                logMVPrepare(connectContext, "MV {} preparation failed: {}", mvName, DebugUtil.getStackTrace(cause));
+                failedMvNames.add(mvName);
             } catch (Exception e) {
-                LOG.warn("MV {} preparation failed with execution exception:{}", mv.getName(), e);
-                logMVPrepare(connectContext, "MV {} preparation failed: {}", mv.getName(), DebugUtil.getStackTrace(e));
-                failedMvNames.add(mv.getName());
-                // Don't throw exception, continue with other MVs
+                // Catch any other unexpected exceptions
+                LOG.warn("MV {} preparation failed with unexpected exception", mvName, e);
+                logMVPrepare(connectContext, "MV {} preparation failed: {}", mvName, DebugUtil.getStackTrace(e));
+                failedMvNames.add(mvName);
             }
         }
         
         // Log summary
         int successCount = mvInfos.size() - timeoutMvNames.size() - failedMvNames.size();
-        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total: {}",
-                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size(), failedMvNames);
+        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total. " +
+                        "Timeout MVs: {}, Failed MVs: {}",
+                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size(), 
+                timeoutMvNames.isEmpty() ? "none" : timeoutMvNames,
+                failedMvNames.isEmpty() ? "none" : failedMvNames);
     }
 
     /**
@@ -870,7 +882,7 @@ public class MvRewritePreprocessor {
      */
     public static boolean checkMvPartitionNamesToRefresh(ConnectContext context,
                                                          MaterializedView mv,
-                                                         Set<String> partitionNamesToRefresh,
+                                                         PCellSortedSet partitionNamesToRefresh,
                                                          MvPlanContext mvPlanContext) {
         if (mvPlanContext == null) {
             logMVPrepare(context, "MV {} plan context is null", mv.getName());
@@ -887,7 +899,7 @@ public class MvRewritePreprocessor {
                 traceOutdatedMVInfo(context, mv, partitionNamesToRefresh);
                 return false;
             }
-        } else if (!mv.getPartitionNames().isEmpty() && partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+        } else if (!mv.getPartitionNames().isEmpty() && partitionNamesToRefresh.containsAllNames(mv.getPartitionNames())) {
             // if the mv is partitioned, and all partitions need refresh, then it can not be a candidate
             traceOutdatedMVInfo(context, mv, partitionNamesToRefresh);
             return false;
@@ -897,7 +909,7 @@ public class MvRewritePreprocessor {
 
     private static void traceOutdatedMVInfo(ConnectContext context,
                                             MaterializedView mv,
-                                            Set<String> partitionNamesToRefresh) {
+                                            PCellSortedSet partitionNamesToRefresh) {
         if (!Tracers.isSetTraceModule(Tracers.Module.MV)) {
             return;
         }
@@ -1016,7 +1028,7 @@ public class MvRewritePreprocessor {
      */
     public static LogicalOlapScanOperator createScanMvOperator(OlapTable mv,
                                                                ColumnRefFactory columnRefFactory,
-                                                               Set<String> excludedPartitions,
+                                                               PCellSortedSet excludedPartitions,
                                                                boolean isWithHiddenColumns) {
         final ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
         final ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
@@ -1056,12 +1068,12 @@ public class MvRewritePreprocessor {
         List<Long> selectTabletIds = Lists.newArrayList();
         List<String> selectedPartitionNames = Lists.newArrayList();
         for (Partition p : mv.getPartitions()) {
-            if (!excludedPartitions.contains(p.getName()) && p.hasData()) {
+            if (!excludedPartitions.containsName(p.getName()) && p.hasData()) {
                 selectPartitionIds.add(p.getId());
                 selectedPartitionNames.add(p.getName());
                 for (PhysicalPartition physicalPartition : p.getSubPartitions()) {
                     MaterializedIndex materializedIndex = physicalPartition.getIndex(mv.getBaseIndexId());
-                    selectTabletIds.addAll(materializedIndex.getTabletIds());
+                    selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
                 }
             }
         }

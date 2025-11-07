@@ -20,6 +20,8 @@ import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprOpcodeRegistry;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
@@ -54,7 +56,7 @@ public class StreamJoinNode extends JoinNode {
                 TEqJoinCondition eqJoinCondition = new TEqJoinCondition(
                         ExprToThriftVisitor.treeToThrift(eqJoinPredicate.getChild(0)),
                         ExprToThriftVisitor.treeToThrift(eqJoinPredicate.getChild(1)));
-                eqJoinCondition.setOpcode(eqJoinPredicate.getOp().getOpcode());
+                eqJoinCondition.setOpcode(ExprOpcodeRegistry.getBinaryOpcode(eqJoinPredicate.getOp()));
                 msg.stream_join_node.addToEq_join_conjuncts(eqJoinCondition);
             }
         }
@@ -62,7 +64,7 @@ public class StreamJoinNode extends JoinNode {
             for (Expr e : otherJoinConjuncts) {
                 msg.stream_join_node.addToOther_join_conjuncts(ExprToThriftVisitor.treeToThrift(e));
             }
-            String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
+            String sqlJoinPredicate = otherJoinConjuncts.stream().map(ExprToSql::toSql).collect(Collectors.joining(","));
             msg.stream_join_node.setSql_join_predicates(sqlJoinPredicate);
         }
     }

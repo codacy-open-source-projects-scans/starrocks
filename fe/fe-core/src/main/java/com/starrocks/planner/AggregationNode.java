@@ -38,8 +38,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
@@ -48,6 +46,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -64,6 +63,8 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TRuntimeFilterDescription;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.nio.ByteBuffer;
@@ -229,7 +230,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             if (sqlAggFuncBuilder.length() > 0) {
                 sqlAggFuncBuilder.append(", ");
             }
-            sqlAggFuncBuilder.append(e.toSql());
+            sqlAggFuncBuilder.append(ExprToSql.toSql(e));
         }
 
         msg.agg_node =
@@ -252,7 +253,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
                 if (sqlGroupingKeysBuilder.length() > 0) {
                     sqlGroupingKeysBuilder.append(", ");
                 }
-                sqlGroupingKeysBuilder.append(e.toSql());
+                sqlGroupingKeysBuilder.append(ExprToSql.toSql(e));
             }
             if (sqlGroupingKeysBuilder.length() > 0) {
                 msg.agg_node.setSql_grouping_keys(sqlGroupingKeysBuilder.toString());

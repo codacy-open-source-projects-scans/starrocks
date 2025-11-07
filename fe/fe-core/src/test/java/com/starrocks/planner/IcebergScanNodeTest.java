@@ -2,7 +2,6 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.BucketProperty;
@@ -38,7 +37,6 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -48,6 +46,8 @@ import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -347,7 +347,7 @@ public class IcebergScanNodeTest {
 
 
         List<Column> schemaColumns = new ArrayList<>();
-        schemaColumns.add(new Column("col1", ScalarType.createVarchar(20)));
+        schemaColumns.add(new Column("col1", TypeFactory.createVarchar(20)));
 
         IcebergTable icebergTable = new IcebergTable.Builder()
                 .setId(1234)

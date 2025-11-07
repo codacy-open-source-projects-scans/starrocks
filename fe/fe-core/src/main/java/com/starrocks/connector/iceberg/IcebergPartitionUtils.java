@@ -21,7 +21,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
@@ -30,10 +29,12 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.types.Types;
@@ -335,12 +336,12 @@ public class IcebergPartitionUtils {
                     LiteralExpr upperExpr = LiteralExpr.create(range.upperEndpoint(), slotRef.getType());
                     Expr lower = new BinaryPredicate(BinaryType.GE, slotRef, lowerExpr);
                     Expr upper = new BinaryPredicate(BinaryType.LT, slotRef, upperExpr);
-                    result.add(Expr.compoundAnd(ImmutableList.of(lower, upper)));
+                    result.add(ExprUtils.compoundAnd(ImmutableList.of(lower, upper)));
                 } catch (AnalysisException e) {
                     throw new StarRocksConnectorException("Create literal expr failed", e);
                 }
             }
-            return Expr.compoundOr(result);
+            return ExprUtils.compoundOr(result);
         }
     }
 }

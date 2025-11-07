@@ -33,7 +33,6 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -81,6 +80,8 @@ import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CaseWhenClause;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -91,6 +92,7 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
@@ -187,7 +189,7 @@ public class QueryAnalyzer {
                     continue;
                 }
 
-                slotRefToAlias.put(((SlotRef) item.getExpr()).toSql(), item.getAlias());
+                slotRefToAlias.put(ExprToSql.toSql(item.getExpr()), item.getAlias());
             }
             List<SlotRef> allRefSlotRefs = new ArrayList<>();
             for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
@@ -199,7 +201,7 @@ public class QueryAnalyzer {
             }
             for (SlotRef slotRef : allRefSlotRefs) {
                 if (!slotRefToAlias.isEmpty()) {
-                    String alias = slotRefToAlias.get(slotRef.toSql());
+                    String alias = slotRefToAlias.get(ExprToSql.toSql(slotRef));
                     if (alias != null) {
                         slotRef.setColumnName(alias);
                     }
@@ -1305,7 +1307,7 @@ public class QueryAnalyzer {
                 for (int i = 0; i < pivotValue.getExprs().size(); i++) {
                     Expr expr = pivotValue.getExprs().get(i);
                     analyzeExpression(expr, analyzeState, queryScope);
-                    if (!Type.canCastTo(expr.getType(), types.get(i))) {
+                    if (!TypeManager.canCastTo(expr.getType(), types.get(i))) {
                         throw new SemanticException("Pivot value type %s is not compatible with pivot column type %s",
                                 expr.getType(), types.get(i));
                     }
@@ -1405,7 +1407,7 @@ public class QueryAnalyzer {
             if (names != null && !names.isEmpty()) {
                 namesArray = names.toArray(String[]::new);
             }
-            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
+            Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {
@@ -1879,7 +1881,7 @@ public class QueryAnalyzer {
             if (!isTemporalOrderingType(leftType) || !isTemporalOrderingType(rightType)) {
                 throw new SemanticException(
                         "ASOF JOIN temporal condition supports only BIGINT, DATE, or DATETIME types in join ON clause, found: " +
-                                leftType.toSql() + " and " + rightType.toSql() + ". predicate: " + predicate.toMySql()
+                                leftType.toSql() + " and " + rightType.toSql() + ". predicate: " + ExprToSql.toMySql(predicate)
                 );
             }
         }
