@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CaseWhenClause;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.JoinOperator;
@@ -75,7 +76,8 @@ public class IVMAnalyzer {
 
     // table tables that supports IVM
     public static final Set<Table.TableType> SUPPORTED_TABLE_TYPES = Set.of(
-            Table.TableType.ICEBERG
+            Table.TableType.ICEBERG,
+            Table.TableType.PAIMON
     );
 
     // join operators that supports IVM
@@ -98,17 +100,11 @@ public class IVMAnalyzer {
         this.queryStatement = queryStatement;
     }
 
-    public static boolean isSupportedIVM(MaterializedView mv) {
-        if (mv == null) {
-            return false;
+    public static boolean isTableTypeIVMSupported(Table.TableType tableType) {
+        if (SUPPORTED_TABLE_TYPES.contains(tableType)) {
+            return true;
         }
-        // check table types
-        for (Table baseTable : mv.getBaseTables()) {
-            if (!SUPPORTED_TABLE_TYPES.contains(baseTable.getType())) {
-                return false;
-            }
-        }
-        return true;
+        return false;
     }
 
     /**
@@ -295,7 +291,7 @@ public class IVMAnalyzer {
         }
         // new aggregate functions
         List<IVMAggFunctionInfo> newAggFuncInfos = Lists.newArrayList();
-        ExprSubstitutionMap substitutionMap = new ExprSubstitutionMap(false);
+        ExprSubstitutionMap substitutionMap = new ExprSubstitutionMap();
         for (FunctionCallExpr aggFuncExpr : aggregateExprs) {
             String aggFuncName = aggFuncExpr.getFnName().getFunction();
             // build intermediate aggregate function
@@ -355,7 +351,7 @@ public class IVMAnalyzer {
     }
 
     private Expr substituteWithMap(Expr expr, ExprSubstitutionMap substitutionMap) {
-        return expr.substitute(substitutionMap);
+        return ExprSubstitutionVisitor.rewrite(expr, substitutionMap);
     }
 
     public static MaterializedView.RefreshMode getRefreshMode(CreateMaterializedViewStatement statement) {
