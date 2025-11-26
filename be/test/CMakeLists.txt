@@ -119,6 +119,7 @@ set(EXEC_FILES
         ./exec/file_scanner/orc_scanner_test.cpp
         ./exec/file_scanner/parquet_scanner_test.cpp
         ./exec/hdfs_scanner/cache_select_scanner_test.cpp
+        ./exec/hdfs_scanner/hdfs_scanner_json_test.cpp
         ./exec/hdfs_scanner/hdfs_scanner_test.cpp
         ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
@@ -466,6 +467,7 @@ SET(DW_TEST_FILES
     ./storage/conjunctive_predicates_test.cpp
     ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
+    ./storage/data_dir_test.cpp
     ./storage/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
