@@ -48,6 +48,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.expression.Expr;
@@ -537,7 +538,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             }
         }
         if (getPrimitiveType().isJsonType() && other.getPrimitiveType().isCharFamily()) {
-            if (other.getStrLen() <= getPrimitiveType().getTypeSize()) {
+            if (other.getStrLen() < getPrimitiveType().getTypeSize()) {
                 throw new DdlException("JSON needs minimum length of " + getPrimitiveType().getTypeSize());
             }
         }

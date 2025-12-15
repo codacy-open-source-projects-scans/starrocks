@@ -183,6 +183,8 @@ import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
 import com.starrocks.thrift.TAnalyzeStatusReq;
 import com.starrocks.thrift.TAnalyzeStatusRes;
 import com.starrocks.thrift.TAuthenticateParams;
+import com.starrocks.thrift.TBatchGetTableSchemaRequest;
+import com.starrocks.thrift.TBatchGetTableSchemaResponse;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
@@ -203,8 +205,6 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDBPrivDesc;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
-import com.starrocks.thrift.TDynamicTabletJobsRequest;
-import com.starrocks.thrift.TDynamicTabletJobsResponse;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeLocksReq;
@@ -252,6 +252,8 @@ import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
+import com.starrocks.thrift.TGetTableSchemaRequest;
+import com.starrocks.thrift.TGetTableSchemaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
@@ -354,6 +356,8 @@ import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTabletLocation;
+import com.starrocks.thrift.TTabletReshardJobsRequest;
+import com.starrocks.thrift.TTabletReshardJobsResponse;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
@@ -457,14 +461,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
-            try {
-                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
-            } catch (AccessDeniedException e) {
+            final String db = ClusterNamespace.getNameFromFullName(fullName);
+            if (!PatternMatcher.matchPattern(params.getPattern(), db, matcher, caseSensitive)) {
                 continue;
             }
 
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
-            if (!PatternMatcher.matchPattern(params.getPattern(), db, matcher, caseSensitive)) {
+            try {
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
+            } catch (AccessDeniedException e) {
                 continue;
             }
 
@@ -3150,8 +3154,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TDynamicTabletJobsResponse getDynamicTabletJobsInfo(TDynamicTabletJobsRequest params) {
-        return GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr().getAllJobsInfo();
+    public TTabletReshardJobsResponse getTabletReshardJobsInfo(TTabletReshardJobsRequest params) {
+        return GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getAllJobsInfo();
     }
 
     @NotNull
@@ -3170,5 +3174,19 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         tConnectionInfo.setWarehouse(row.get(10));
         tConnectionInfo.setCngroup(row.get(11));
         return tConnectionInfo;
+    }
+
+    @Override
+    public TBatchGetTableSchemaResponse getTableSchema(TBatchGetTableSchemaRequest batchRequest) {
+        TBatchGetTableSchemaResponse batchResponse = new TBatchGetTableSchemaResponse();
+        // Always set global status OK for now. Could use it for authentication/QoS, etc., in the future.
+        batchResponse.setStatus(new TStatus(OK));
+        if (batchRequest.isSetRequests()) {
+            for (TGetTableSchemaRequest request : batchRequest.getRequests()) {
+                TGetTableSchemaResponse response = TableSchemaService.getTableSchema(request);
+                batchResponse.addToResponses(response);
+            }
+        }
+        return batchResponse;
     }
 }

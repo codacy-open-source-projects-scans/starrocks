@@ -320,6 +320,26 @@ public class Config extends ConfigBase {
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
+    @ConfField(mutable = true, comment = "Enable automatic log cleaning based on disk usage. " +
+            "When enabled, logs will be cleaned when disk usage exceeds the threshold.")
+    public static boolean log_cleaner_disk_util_based_enable = false;
+
+    @ConfField(mutable = true, comment = "Disk usage threshold (percentage) to trigger log cleaning. " +
+            "When disk usage exceeds this threshold, log cleaning will start. Default is 80, meaning 80%.")
+    public static int log_cleaner_disk_usage_threshold = 80;
+
+    @ConfField(mutable = true, comment = "Target disk usage (percentage) after log cleaning. " +
+            "Log cleaning will continue until disk usage drops below this threshold. Default is 60, meaning 60%.")
+    public static int log_cleaner_disk_usage_target = 60;
+
+    @ConfField(mutable = true, comment = "Minimum retention days for audit log files. " +
+            "Audit log files newer than this will not be deleted even if disk usage is high. Default is 3 days.")
+    public static int log_cleaner_audit_log_min_retention_days = 3;
+
+    @ConfField(mutable = true, comment = "Interval in seconds to check disk usage and clean logs. " +
+            "Default is 300 seconds (5 minutes).")
+    public static int log_cleaner_check_interval_second = 300;
+
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
      * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
@@ -2226,7 +2246,9 @@ public class Config extends ConfigBase {
     public static int statistic_analyze_task_pool_size = 3;
 
     /**
-     * statistic collect query timeout
+     * statistic collect query timeout (in seconds)
+     * This is the total timeout for the entire analyze job, not for individual SQL tasks.
+     * Each SQL task within the job will use the remaining time based on the job start time.
      */
     @ConfField(mutable = true)
     public static long statistic_collect_query_timeout = 3600; // 1h
@@ -2788,8 +2810,11 @@ public class Config extends ConfigBase {
             comment = "Enable the sql digest feature, building a parameterized digest for each sql in the query detail")
     public static boolean enable_sql_digest = false;
 
-    @ConfField(mutable = true, comment = "explain level of query plan in this detail")
+    @ConfField(mutable = true, comment = "explain level of query plan in query_detail API")
     public static String query_detail_explain_level = "COSTS";
+
+    @ConfField(mutable = true, comment = "explain level of query plan")
+    public static String query_explain_level = "NORMAL";
 
     /**
      * StarRocks-manager pull queries every 1 second
@@ -3024,7 +3049,7 @@ public class Config extends ConfigBase {
 
     /**
      * If set to false, when the load is empty, success is returned.
-     * Otherwise, `No partitions have data available for loading` is returned.
+     * Otherwise, `No rows were imported from upstream` is returned.
      */
     @ConfField(mutable = true)
     public static boolean empty_load_as_error = true;
@@ -3189,6 +3214,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "metadata expired time from full vacuum begin running")
     public static long lake_fullvacuum_meta_expired_seconds = 3600L * 24L * 2L;
+
+    @ConfField(mutable = true, comment = "Whether to enable full vacuum daemon")
+    public static boolean lake_enable_fullvacuum = false;
 
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
@@ -3554,6 +3582,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
     public static boolean enable_mv_query_context_cache = true;
+
+    @ConfField(mutable = true, comment = "Whether enable to cache mv global context or not which its lifecycle is " +
+            "as the same with the mv")
+    public static boolean enable_mv_global_context_cache = true;
+
+    @ConfField(mutable = true, comment = "Max materialized view global context cache size during one mv's lifecycle.")
+    public static long mv_global_context_cache_max_size = 5000;
 
     @ConfField(mutable = true, comment = "Mv refresh fails if there is filtered data, true by default")
     public static boolean mv_refresh_fail_on_filter_data = true;
@@ -3979,34 +4014,34 @@ public class Config extends ConfigBase {
     public static boolean enable_range_distribution = false;
 
     /**
-     * The default scheduler interval for dynamic tablet jobs.
+     * The default scheduler interval for tablet reshard jobs.
      */
-    @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
-    public static long dynamic_tablet_job_scheduler_interval_ms = 10;
+    @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs.")
+    public static long tablet_reshard_job_scheduler_interval_ms = 10;
 
     /**
-     * The max keep time of dynamic tablet history jobs.
+     * The max keep time of tablet reshard history jobs.
      */
-    @ConfField(mutable = true, comment = "The max keep time of dynamic tablet history jobs.")
-    public static long dynamic_tablet_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
+    @ConfField(mutable = true, comment = "The max keep time of tablet reshard history jobs.")
+    public static long tablet_reshard_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
 
     /**
      * The max number of tablets can do tablet splitting and merging in parallel.
      */
     @ConfField(mutable = true, comment = "The max number of tablets can do tablet splitting and merging in parallel.")
-    public static long dynamic_tablet_max_parallel_tablets = 10 * 1024;
+    public static long tablet_reshard_max_parallel_tablets = 10 * 1024;
 
     /**
      * Tablets with size larger than this value will be considered to split.
      */
     @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
-    public static long dynamic_tablet_split_size = 4L * 1024L * 1024L * 1024L;
+    public static long tablet_reshard_split_size = 4L * 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int dynamic_tablet_max_split_count = 8;
+    public static int tablet_reshard_max_split_count = 8;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

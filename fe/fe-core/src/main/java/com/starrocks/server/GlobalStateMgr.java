@@ -44,7 +44,7 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.alter.dynamictablet.DynamicTabletJobMgr;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.JwkMgr;
 import com.starrocks.authorization.AccessControlProvider;
@@ -90,6 +90,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.LogCleaner;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -506,6 +507,8 @@ public class GlobalStateMgr {
 
     private ProcProfileCollector procProfileCollector;
 
+    private LogCleaner logCleaner;
+
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
     private TemporaryTableMgr temporaryTableMgr;
@@ -535,7 +538,7 @@ public class GlobalStateMgr {
 
     private JwkMgr jwkMgr;
 
-    private final DynamicTabletJobMgr dynamicTabletJobMgr;
+    private final TabletReshardJobMgr tabletReshardJobMgr;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -834,6 +837,7 @@ public class GlobalStateMgr {
 
         this.memoryUsageTracker = new MemoryUsageTracker();
         this.procProfileCollector = new ProcProfileCollector();
+        this.logCleaner = new LogCleaner();
 
         this.sqlParser = new SqlParser(AstBuilder.getInstance());
         this.analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
@@ -859,7 +863,7 @@ public class GlobalStateMgr {
 
         this.jwkMgr = new JwkMgr();
 
-        this.dynamicTabletJobMgr = new DynamicTabletJobMgr();
+        this.tabletReshardJobMgr = new TabletReshardJobMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -1123,8 +1127,8 @@ public class GlobalStateMgr {
         return clusterSnapshotMgr;
     }
 
-    public DynamicTabletJobMgr getDynamicTabletJobMgr() {
-        return dynamicTabletJobMgr;
+    public TabletReshardJobMgr getTabletReshardJobMgr() {
+        return tabletReshardJobMgr;
     }
 
     // Use tryLock to avoid potential deadlock
@@ -1457,6 +1461,9 @@ public class GlobalStateMgr {
             // Need to rebuild active lake compaction transactions before lake scheduler starting to run
             // Lake compactionMgr is started on all FE nodes and scheduler only starts to run when the FE is leader
             compactionMgr.buildActiveCompactionTransactionMap();
+            // restore storage volumes to virtual tablet group mappings while FE is leader
+            // (include after transferring to leader role)
+            ((SharedDataStorageVolumeMgr) storageVolumeMgr).restoreStorageVolumeToVTabletGroupMappings();
 
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
@@ -1483,7 +1490,7 @@ public class GlobalStateMgr {
         tabletCollector.start();
 
         if (RunMode.isSharedDataMode()) {
-            dynamicTabletJobMgr.start();
+            tabletReshardJobMgr.start();
         }
     }
 
@@ -1527,6 +1534,8 @@ public class GlobalStateMgr {
         refreshDictionaryCacheTaskDaemon.start();
 
         procProfileCollector.start();
+
+        logCleaner.start();
 
         warehouseIdleChecker.start();
 
@@ -1621,7 +1630,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
-                .put(SRMetaBlockID.DYNAMIC_TABLET_JOB_MGR, dynamicTabletJobMgr::load)
+                .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1849,7 +1858,7 @@ public class GlobalStateMgr {
                 sqlBlackList.save(imageWriter);
                 clusterSnapshotMgr.save(imageWriter);
                 historicalNodeMgr.save(imageWriter);
-                dynamicTabletJobMgr.save(imageWriter);
+                tabletReshardJobMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

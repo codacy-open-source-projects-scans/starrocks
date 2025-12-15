@@ -276,6 +276,8 @@ message TxnLogPB {
         repeated OpWrite op_writes = 2;
         map<uint32, DelvecDataPB> delvecs = 3;
         optional TabletSchemaPB source_schema = 4;
+        // used for shared-data replication to store the tablet meta replicated
+        optional TabletMetadataPB tablet_metadata = 5;
     }
 
     optional int64 tablet_id = 1;
@@ -322,7 +324,7 @@ message IdenticalTabletInfoPB {
     optional int64 new_tablet_id = 2;
 }
 
-message DynamicTabletsInfoPB {
+message ReshardingTabletsInfoPB {
     repeated SplittingTabletInfoPB splitting_tablet_infos = 1;
     repeated MergingTabletInfoPB merging_tablet_infos = 2;
     repeated IdenticalTabletInfoPB identical_tablet_infos = 3;

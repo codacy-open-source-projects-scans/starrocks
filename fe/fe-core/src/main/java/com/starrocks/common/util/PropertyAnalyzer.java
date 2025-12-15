@@ -43,14 +43,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
@@ -78,6 +76,8 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -272,7 +272,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
 
-    public static final String PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE = "dynamic_tablet_split_size";
+    public static final String PROPERTIES_TABLET_RESHARD_SPLIT_SIZE = "tablet_reshard_split_size";
 
     public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
 
@@ -1610,22 +1610,22 @@ public class PropertyAnalyzer {
         return TCompactionStrategy.DEFAULT;
     }
 
-    public static long analyzeDynamicTabletSplitSize(Map<String, String> properties, boolean removeProperties)
+    public static long analyzeTabletReshardSplitSize(Map<String, String> properties, boolean removeProperties)
             throws AnalysisException {
-        long dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
+        long tabletReshardSplitSize = Config.tablet_reshard_split_size;
         if (properties != null) {
-            String value = removeProperties ? properties.remove(PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE)
-                    : properties.get(PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE);
+            String value = removeProperties ? properties.remove(PROPERTIES_TABLET_RESHARD_SPLIT_SIZE)
+                    : properties.get(PROPERTIES_TABLET_RESHARD_SPLIT_SIZE);
             if (value != null) {
                 try {
-                    dynamicTabletSplitSize = Long.parseLong(value);
+                    tabletReshardSplitSize = Long.parseLong(value);
                 } catch (Exception e) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE,
-                            PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE, value, "a positive integer");
+                            PROPERTIES_TABLET_RESHARD_SPLIT_SIZE, value, "a positive integer");
                 }
             }
         }
-        return dynamicTabletSplitSize;
+        return tabletReshardSplitSize;
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,

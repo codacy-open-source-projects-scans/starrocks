@@ -164,18 +164,8 @@ Status TabletManager::drop_local_cache(const std::string& path) {
 }
 
 // current lru cache does not support updating value size, so use refill to update.
-void TabletManager::update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint) {
-    // use write lock to protect parallel segment size update
-    std::unique_lock wrlock(_meta_lock);
-    auto segment = _metacache->lookup_segment(key);
-    if (segment == nullptr) {
-        return;
-    }
-    if (segment_addr_hint != 0 && segment_addr_hint != reinterpret_cast<intptr_t>(segment.get())) {
-        // the segment in cache is not the one as expected, skip the cache update
-        return;
-    }
-    _metacache->cache_segment(key, std::move(segment));
+void TabletManager::update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint) {
+    _metacache->cache_segment_if_present(key, mem_cost, segment_addr_hint);
 }
 
 void TabletManager::prune_metacache() {
@@ -326,6 +316,7 @@ DEFINE_FAIL_POINT(tablet_meta_not_found);
 // NOTE: tablet_metas is non-const and we will clear schemas for optimization.
 // Callers should ensure thread safety.
 Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
+    TEST_ERROR_POINT("TabletManager::put_bundle_tablet_metadata");
     if (tablet_metas.empty()) {
         return Status::InternalError("tablet_metas cannot be empty");
     }
@@ -456,6 +447,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                const CacheOptions& cache_opts, int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
+    TEST_ERROR_POINT("TabletManager::get_tablet_metadata");
     StatusOr<TabletMetadataPtr> tablet_metadata_or;
     auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
     if (cache_key.ok() && _metacache->lookup_aggregation_partition(*cache_key)) {
@@ -537,10 +529,10 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
     auto file_size = serialized_string.size();
     auto footer_size = sizeof(uint64_t);
     auto bundle_metadata_size = decode_fixed64_le((uint8_t*)(serialized_string.data() + file_size - footer_size));
-    RETURN_IF(file_size < footer_size + bundle_metadata_size,
+    RETURN_IF(file_size < footer_size + bundle_metadata_size || bundle_metadata_size == 0,
               Status::Corruption(strings::Substitute(
-                      "deserialized shared metadata($0) failed, file_size($1) < bundle_metadata_size($2)", path,
-                      file_size, bundle_metadata_size + footer_size)));
+                      "deserialized shared metadata($0) failed, file_size($1), bundle_metadata_size($2)", path,
+                      file_size, bundle_metadata_size)));
 
     auto bundle_metadata = std::make_shared<BundleTabletMetadataPB>();
     std::string_view bundle_metadata_str =
@@ -673,7 +665,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     auto metadata = std::make_shared<TabletMetadataPB>();
     std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
     if (!metadata->ParseFromArray(metadata_str.data(), size)) {
-        return Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
+        auto corrupted_status =
+                Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
+        (void)corrupted_tablet_meta_handler(corrupted_status, path);
+        return corrupted_status;
     }
 
     FAIL_POINT_TRIGGER_EXECUTE(tablet_schema_not_found_in_bundle_metadata, { tablet_id = 10003; });
@@ -1238,7 +1233,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         if (fill_meta_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
-            if (auto cached_segment = metacache()->cache_segment_if_absent(segment_info.path, segment);
+            if (auto cached_segment = _metacache->cache_segment_if_absent(segment_info.path, segment);
                 cached_segment != nullptr) {
                 segment = cached_segment;
             }

@@ -17,7 +17,7 @@ package com.starrocks.persist;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.alter.dynamictablet.DynamicTabletJob;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
@@ -160,7 +160,9 @@ public class EditLogDeserializer {
             .put(OperationType.OP_UPDATE_LOAD_JOB, LoadJob.LoadJobStateUpdateInfo.class)
             .put(OperationType.OP_CREATE_RESOURCE, Resource.class)
             .put(OperationType.OP_DROP_RESOURCE, DropResourceOperationLog.class)
+            .put(OperationType.OP_ALTER_RESOURCE, AlterResourceInfo.class)
             .put(OperationType.OP_RESOURCE_GROUP, ResourceGroupOpEntry.class)
+            .put(OperationType.OP_ALTER_RESOURCE_GROUP, AlterResourceGroupLog.class)
             .put(OperationType.OP_CREATE_TASK, Task.class)
             .put(OperationType.OP_ALTER_TASK, AlterTaskInfo.class)
             .put(OperationType.OP_DROP_TASKS, DropTasksLog.class)
@@ -175,7 +177,6 @@ public class EditLogDeserializer {
             .put(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, TableInfo.class)
             .put(OperationType.OP_SET_REPLICA_STATUS, SetReplicaStatusOperationLog.class)
             .put(OperationType.OP_DYNAMIC_PARTITION, ModifyTablePropertyOperationLog.class)
-            .put(OperationType.OP_MODIFY_IN_MEMORY, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_SET_HAS_DELETE, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_REPLICATION_NUM, ModifyTablePropertyOperationLog.class)
@@ -242,9 +243,11 @@ public class EditLogDeserializer {
             .put(OperationType.OP_UPDATE_STORAGE_VOLUME, StorageVolume.class)
             .put(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, TableStorageInfos.class)
             .put(OperationType.OP_PIPE, PipeOpEntry.class)
+            .put(OperationType.OP_ALTER_PIPE, AlterPipeLog.class)
             .put(OperationType.OP_CREATE_DICTIONARY, Dictionary.class)
             .put(OperationType.OP_DROP_DICTIONARY, DropDictionaryInfo.class)
             .put(OperationType.OP_MODIFY_DICTIONARY_MGR, DictionaryMgrInfo.class)
+            .put(OperationType.OP_MODIFY_DICTIONARY_MGR_V2, UpdateDictionaryMgrLog.class)
             .put(OperationType.OP_DECOMMISSION_DISK, DecommissionDiskInfo.class)
             .put(OperationType.OP_CANCEL_DECOMMISSION_DISK, CancelDecommissionDiskInfo.class)
             .put(OperationType.OP_DISABLE_DISK, DisableDiskInfo.class)
@@ -267,8 +270,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_ENABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_DISABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
-            .put(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, DynamicTabletJob.class)
-            .put(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, RemoveDynamicTabletJobLog.class)
+            .put(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, TabletReshardJob.class)
+            .put(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, RemoveTabletReshardJobLog.class)
             .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)
             .put(OperationType.OP_ERASE_DB_V2, EraseDbLog.class)
             .put(OperationType.OP_ERASE_PARTITION_V2, ErasePartitionLog.class)

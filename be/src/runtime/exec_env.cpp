@@ -72,6 +72,7 @@
 #include "runtime/heartbeat_flags.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/load_path_mgr.h"
+#include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/profile_report_worker.h"
@@ -94,7 +95,6 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #include "udf/python/env.h"
-#include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
 #include "util/mem_info.h"
@@ -237,6 +237,8 @@ Status GlobalEnv::_init_mem_tracker() {
     _update_mem_tracker->set_level(2);
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);
+    _brpc_iobuf_mem_tracker = regist_tracker(MemTrackerType::BRPC_IOBUF, -1, nullptr);
+    _brpc_iobuf_mem_tracker->set_level(2);
     _clone_mem_tracker = regist_tracker(MemTrackerType::CLONE, -1, process_mem_tracker());
     ASSIGN_OR_RETURN(int64_t consistency_mem_limit, calc_max_consistency_memory(_process_mem_tracker->limit()));
     _consistency_mem_tracker =
@@ -319,6 +321,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
     _metrics = StarRocksMetrics::instance()->metrics();
     _stream_mgr = new DataStreamMgr();
+    _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
     _result_mgr = new ResultBufferMgr();
     _result_queue_mgr = new ResultQueueMgr();
     _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
@@ -495,9 +498,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&put_combined_txn_log_thread_pool));
     _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
 
-#if !defined(__APPLE__) && !defined(BE_TEST)
-    _bfd_parser = BfdParser::create();
-#endif
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache(this);
@@ -662,6 +662,9 @@ void ExecEnv::stop() {
         _stream_mgr->close();
         component_times.emplace_back("stream_mgr", MonotonicMillis() - start);
     }
+    if (_lookup_dispatcher_mgr != nullptr) {
+        _lookup_dispatcher_mgr->close();
+    }
 
     if (_pipeline_sink_io_pool) {
         start = MonotonicMillis();
@@ -816,9 +819,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
-#if !defined(__APPLE__)
-    SAFE_DELETE(_bfd_parser);
-#endif
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
@@ -857,6 +857,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_result_queue_mgr);
     SAFE_DELETE(_result_mgr);
     SAFE_DELETE(_stream_mgr);
+    SAFE_DELETE(_lookup_dispatcher_mgr);
     SAFE_DELETE(_batch_write_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);

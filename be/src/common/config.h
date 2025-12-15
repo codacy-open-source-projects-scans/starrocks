@@ -935,6 +935,10 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
+CONF_mBool(pipeline_timeout_diagnostic, "false");
+// If this value is greater than 0 and the query time exceeds the timeout, then execute gcore on the process.
+CONF_Int64(pipeline_gcore_timeout_threshold_sec, "-1");
+CONF_String(pipeline_gcore_output_dir, "${STARROCKS_HOME}/log");
 
 // The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
 // when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
@@ -1797,4 +1801,13 @@ CONF_Int32(llm_max_queue_size, "4096");
 CONF_Int32(llm_max_concurrent_queries, "8");
 
 CONF_Int32(llm_cache_size, "131072");
+
+CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
+
+// used by global late materialization, may be removed in the future
+CONF_mInt64(fetch_max_buffer_chunk_num, "8");
+CONF_mInt64(max_batch_num_per_fetch_operator, "8");
+CONF_mInt64(max_chunk_num_per_fetch_batch, "8");
+CONF_mBool(enable_fetch_local_pass_through, "true");
+CONF_mInt64(max_lookup_batch_request, "8");
 } // namespace starrocks::config

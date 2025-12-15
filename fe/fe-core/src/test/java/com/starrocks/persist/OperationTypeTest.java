@@ -34,7 +34,6 @@ public class OperationTypeTest {
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_AUTO_INCREMENT_ID));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DYNAMIC_PARTITION));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_REPLICATION_NUM));
-        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_IN_MEMORY));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SET_HAS_DELETE));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_INSTALL_PLUGIN));
@@ -156,8 +155,8 @@ public class OperationTypeTest {
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CLUSTER_SNAPSHOT_LOG));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST));
-        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG));
-        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG));
+        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG));
+        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG));
     }
 
     @Test

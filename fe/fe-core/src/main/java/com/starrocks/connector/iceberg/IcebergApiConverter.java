@@ -193,7 +193,7 @@ public class IcebergApiConverter {
             if (colName.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 Expr partExpr = desc.getPartitionExprs().get(idx++);
                 if (partExpr instanceof FunctionCallExpr) {
-                    String fn = ((FunctionCallExpr) partExpr).getFnName().getFunction();
+                    String fn = ((FunctionCallExpr) partExpr).getFunctionName();
                     Expr child = ((FunctionCallExpr) partExpr).getChild(0);
                     if (child instanceof SlotRef) {
                         colName = ((SlotRef) child).getColumnName();
@@ -432,7 +432,12 @@ public class IcebergApiConverter {
         }
 
         for (Types.NestedField field : nativeTable.schema().columns()) {
-            if (field.type() instanceof Types.DecimalType || field.type() == Types.UUIDType.get()) {
+            // https://apache.googlesource.com/parquet-format/+/HEAD/LogicalTypes.md
+            // the decimal128/uuid data sinked with physical type fixed_len_byte_array will be stored as big endian
+            // decimal64/32 are sinked with physical type int as little endian
+            // iceberg data file's upper/lower bound treat decimal/uuid's byte buffer as big endian.
+            if (dataFile.getFormat().equalsIgnoreCase("PARQUET")
+                    && field.type() instanceof Types.DecimalType && ((Types.DecimalType) field.type()).precision() <= 18) {
                 //change to BigEndian
                 reverseBuffer(lowerBounds.get(field.fieldId()));
                 reverseBuffer(upperBounds.get(field.fieldId()));
