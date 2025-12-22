@@ -1,4 +1,4 @@
--- name: test_bucket_size
+-- name: test_bucket_size @native
 create table t(k int);
 -- result:
 -- !result
@@ -72,7 +72,7 @@ alter table t set('bucket_size'='2048');
 
 
 
--- name: test_automatic_bucket
+-- name: test_automatic_bucket @native
 create database kkk;
 -- result:
 -- !result
@@ -549,7 +549,7 @@ select * from t;
 
 
 
--- name: test_mutable_bucket @sequential
+-- name: test_mutable_bucket @sequential @native
 create database ggg;
 -- result:
 -- !result

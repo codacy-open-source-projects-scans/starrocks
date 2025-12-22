@@ -37,7 +37,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TGetTableSchemaRequest;
 import com.starrocks.thrift.TGetTableSchemaResponse;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.thrift.TTableSchemaMeta;
+import com.starrocks.thrift.TTableSchemaKey;
 import com.starrocks.thrift.TTableSchemaRequestSource;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -129,17 +129,17 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
         return coordinator;
     }
 
-    private static TTableSchemaMeta createSchemaMeta(long schemaId, long dbId, long tableId) {
-        TTableSchemaMeta schemaMeta = new TTableSchemaMeta();
-        schemaMeta.setSchema_id(schemaId);
-        schemaMeta.setDb_id(dbId);
-        schemaMeta.setTable_id(tableId);
-        return schemaMeta;
+    private static TTableSchemaKey createSchemaKey(long schemaId, long dbId, long tableId) {
+        TTableSchemaKey schemaKey = new TTableSchemaKey();
+        schemaKey.setSchema_id(schemaId);
+        schemaKey.setDb_id(dbId);
+        schemaKey.setTable_id(tableId);
+        return schemaKey;
     }
 
     private static TGetTableSchemaRequest createScanRequest(long schemaId, long dbId, long tableId, TUniqueId queryId) {
         TGetTableSchemaRequest request = new TGetTableSchemaRequest();
-        request.setSchema_meta(createSchemaMeta(schemaId, dbId, tableId));
+        request.setSchema_key(createSchemaKey(schemaId, dbId, tableId));
         request.setSource(TTableSchemaRequestSource.SCAN);
         request.setQuery_id(queryId);
         return request;
@@ -147,7 +147,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
 
     private static TGetTableSchemaRequest createLoadRequest(long schemaId, long dbId, long tableId, long txnId) {
         TGetTableSchemaRequest request = new TGetTableSchemaRequest();
-        request.setSchema_meta(createSchemaMeta(schemaId, dbId, tableId));
+        request.setSchema_key(createSchemaKey(schemaId, dbId, tableId));
         request.setSource(TTableSchemaRequestSource.LOAD);
         request.setTxn_id(txnId);
         return request;
@@ -168,27 +168,27 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
 
     private static Stream<Arguments> parameterValidationTestCases() {
         return Stream.of(
-                Arguments.of("MissingSchemaMeta",
+                Arguments.of("MissingSchemaKey",
                         (Consumer<TGetTableSchemaRequest>) request -> {
                             request.setSource(TTableSchemaRequestSource.SCAN);
                             request.setQuery_id(new TUniqueId(1, 1));
                         },
-                        "schema meta not set"),
+                        "schema key not set"),
                 Arguments.of("MissingRequestSource",
                         (Consumer<TGetTableSchemaRequest>) request -> {
-                            request.setSchema_meta(createSchemaMeta(1L, 1L, 1L));
+                            request.setSchema_key(createSchemaKey(1L, 1L, 1L));
                             request.setQuery_id(new TUniqueId(1, 1));
                         },
                         "request source not set"),
                 Arguments.of("ScanWithoutQueryId",
                         (Consumer<TGetTableSchemaRequest>) request -> {
-                            request.setSchema_meta(createSchemaMeta(1L, 1L, 1L));
+                            request.setSchema_key(createSchemaKey(1L, 1L, 1L));
                             request.setSource(TTableSchemaRequestSource.SCAN);
                         },
                         "query id not set for scan"),
                 Arguments.of("LoadWithoutTxnId",
                         (Consumer<TGetTableSchemaRequest>) request -> {
-                            request.setSchema_meta(createSchemaMeta(1L, 1L, 1L));
+                            request.setSchema_key(createSchemaKey(1L, 1L, 1L));
                             request.setSource(TTableSchemaRequestSource.LOAD);
                         },
                         "txn id not set for load")
@@ -198,7 +198,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInQueryCoordinator() throws Exception {
         LakeTable table = createTable("t_scan_coordinator");
-        long indexId = table.getBaseIndexId();
+        long indexId = table.getBaseIndexMetaId();
         SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
 
         // Execute query to create coordinator with scan nodes
@@ -228,7 +228,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInCatalog() throws Exception {
         LakeTable table = createTable("t_found_in_catalog");
-        long indexId = table.getBaseIndexId();
+        long indexId = table.getBaseIndexMetaId();
         SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
 
         // query fallback to catalog
@@ -252,7 +252,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInHistory() throws Exception {
         LakeTable table = createTable("t_found_in_history");
-        long indexId = table.getBaseIndexId();
+        long indexId = table.getBaseIndexMetaId();
         SchemaInfo oldSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
 
         // Begin a transaction before alter to prevent the history schema to be cleaned
@@ -273,7 +273,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
         Assertions.assertEquals(historySchema.get(), oldSchemaInfo);
 
         // Verify that oldSchemaId is not in the current table's schemas
-        boolean oldSchemaIdInCurrentTable = table.getIndexIdToMeta().values().stream()
+        boolean oldSchemaIdInCurrentTable = table.getIndexMetaIdToMeta().values().stream()
                 .anyMatch(indexMeta -> indexMeta.getSchemaId() == oldSchemaInfo.getId());
         Assertions.assertFalse(oldSchemaIdInCurrentTable,
                 "Old schema ID should not exist in current table's schemas after alter");
@@ -308,7 +308,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testScanNotFound() throws Exception {
         LakeTable table = createTable("t_scan_not_found");
-        long indexId = table.getBaseIndexId();
+        long indexId = table.getBaseIndexMetaId();
         SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
 
         // query not exists, and schema not found in catalog and history
@@ -346,7 +346,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testLoadNotFound() throws Exception {
         LakeTable table = createTable("t_load_not_found");
-        long invalidSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexId()).getSchemaId() - 1;
+        long invalidSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId() - 1;
 
         // txn not exist
         {

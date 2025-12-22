@@ -218,6 +218,7 @@ enum TTaskType {
     REPLICATE_SNAPSHOT,
     UPDATE_SCHEMA,
     COMPACTION_CONTROL,
+    EXTERNAL_CLUSTER_SNAPSHOT,
     NUM_TASK_TYPE
 }
 
@@ -632,8 +633,7 @@ struct TParquetOptions {
 
 struct TVariant {
     1: optional TTypeDesc type
-    2: optional i64 int_value
-    3: optional string string_value
+    2: optional string value
 }
 
 struct TTuple {

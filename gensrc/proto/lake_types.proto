@@ -231,6 +231,7 @@ message BundleTabletMetadataPB {
 }
 
 message TxnLogPB {
+
     message OpWrite {
         optional RowsetMetadataPB rowset = 1;
         // some txn semantic information bind to this rowset
@@ -241,6 +242,8 @@ message TxnLogPB {
         repeated bytes del_encryption_metas = 5;
         repeated FileMetaPB ssts = 6;
         repeated PersistentIndexSstableRangePB sst_ranges = 7;
+        // The specific table schema used to generate this rowset
+        optional TableSchemaKeyPB schema_key = 8;
     }
 
     message OpCompaction {
@@ -337,8 +340,8 @@ message IdenticalTabletInfoPB {
     optional int64 new_tablet_id = 2;
 }
 
-message ReshardingTabletsInfoPB {
-    repeated SplittingTabletInfoPB splitting_tablet_infos = 1;
-    repeated MergingTabletInfoPB merging_tablet_infos = 2;
-    repeated IdenticalTabletInfoPB identical_tablet_infos = 3;
+message ReshardingTabletInfoPB {
+    optional SplittingTabletInfoPB splitting_tablet_info = 1;
+    optional MergingTabletInfoPB merging_tablet_info = 2;
+    optional IdenticalTabletInfoPB identical_tablet_info = 3;
 }

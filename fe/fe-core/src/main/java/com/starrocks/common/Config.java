@@ -3794,6 +3794,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_parser_context_cache = true;
 
+    @ConfField
+    public static boolean enable_concurrent_parse_optimization = false;
+
     // Whether restore tables into colocate group if the
     // backuped table is colocated
     @ConfField(mutable = true)
@@ -3871,6 +3874,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int arrow_max_service_task_threads_num = 4096;
+
+    // Maximum time in milliseconds that a subsequent query on the same Arrow Flight SQL connection will wait
+    // for the previous query to finish before returning an error.
+    @ConfField(mutable = true)
+    public static long arrow_flight_sql_connection_query_wait_timeout_ms = 10_000;
 
     @ConfField(mutable = false)
     public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
@@ -4045,16 +4053,16 @@ public class Config extends ConfigBase {
     public static long tablet_reshard_max_parallel_tablets = 10 * 1024;
 
     /**
-     * Tablets with size larger than this value will be considered to split.
+     * Tablet splitting and merging will make tablet size around this value.
      */
-    @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
-    public static long tablet_reshard_split_size = 4L * 1024L * 1024L * 1024L;
+    @ConfField(mutable = true, comment = "Tablet splitting and merging will make tablet size around this value.")
+    public static long tablet_reshard_target_size = 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int tablet_reshard_max_split_count = 8;
+    public static int tablet_reshard_max_split_count = 1024;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

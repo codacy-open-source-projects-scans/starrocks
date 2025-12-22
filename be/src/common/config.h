@@ -203,6 +203,10 @@ CONF_mInt32(replication_min_speed_limit_kbps, "50");
 CONF_mInt32(replication_min_speed_time_seconds, "300");
 // Clear expired replication snapshots interval
 CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
+// The lake replication slow log threshold
+CONF_mInt64(lake_replication_slow_log_ms, "30000");
+// The buffer size used for reading remote data during lake replication
+CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -509,6 +513,17 @@ CONF_mBool(enable_load_channel_rpc_async, "true");
 CONF_mInt32(load_channel_rpc_thread_pool_num, "-1");
 // The queue size for Load channel rpc thread pool
 CONF_Int32(load_channel_rpc_thread_pool_queue_size, "1024000");
+// Time(seconds) for load channel to wait for clean up load id after aborted.
+//
+// When a load job is cancelled or failed, load channel will be aborted.
+// In order to reject any late-arrival request, load channel will keep
+// the aborted load id for this duration before cleaning up.
+// * Setting it too small may cause late-arrival requests being accepted incorrectly.
+// * Setting it too large may cause resources to be held for a long time.
+// NOTE: The background thread will clean up periodically.
+// In production, the minimum interval is 60 seconds.
+// Default is 600 seconds.
+CONF_mInt32(load_channel_abort_clean_up_delay_seconds, "600");
 // Number of thread for async delta writer.
 // Default value is max(cpucores/2, 16)
 CONF_mInt32(number_tablet_writer_threads, "0");
@@ -1853,4 +1868,7 @@ CONF_mInt64(max_batch_num_per_fetch_operator, "8");
 CONF_mInt64(max_chunk_num_per_fetch_batch, "8");
 CONF_mBool(enable_fetch_local_pass_through, "true");
 CONF_mInt64(max_lookup_batch_request, "8");
+
+// For table schema service: max retry attempts for fetching schema from FE.
+CONF_mInt32(table_schema_service_max_retries, "3");
 } // namespace starrocks::config
