@@ -1808,10 +1808,14 @@ CONF_mBool(enable_load_spill, "true");
 CONF_mInt64(load_spill_max_chunk_bytes, "10485760");
 // Max merge input bytes during spill merge. Default is 1024MB.
 CONF_mInt64(load_spill_max_merge_bytes, "1073741824");
+// Max memory usage per merge during spill merge. Default is 1024MB.
+CONF_mInt64(load_spill_memory_usage_per_merge, "1073741824");
 // Max memory used for merge load spill blocks.
 CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 // Upper bound of spill merge thread count
 CONF_mInt64(load_spill_merge_max_thread, "16");
+// Enable parallel spill merge inside single tablet
+CONF_mBool(enable_load_spill_parallel_merge, "true");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
 // Batch size for column mode partial update when processing insert rows.
@@ -1868,7 +1872,12 @@ CONF_mInt64(max_batch_num_per_fetch_operator, "8");
 CONF_mInt64(max_chunk_num_per_fetch_batch, "8");
 CONF_mBool(enable_fetch_local_pass_through, "true");
 CONF_mInt64(max_lookup_batch_request, "8");
-
 // For table schema service: max retry attempts for fetching schema from FE.
 CONF_mInt32(table_schema_service_max_retries, "3");
+
+// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing columns.
+CONF_mBool(enable_cow_optimization, "true");
+// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
+CONF_Int32(cow_optimization_diagnose_level, "0");
+
 } // namespace starrocks::config

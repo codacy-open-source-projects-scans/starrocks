@@ -115,6 +115,7 @@ set(EXEC_FILES
         ./exec/sorting_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
         ./exec/tablet_sink_sender_range_test.cpp
+        ./exec/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/file_scanner/avro_cpp_scanner_test.cpp
@@ -255,6 +256,7 @@ set(EXEC_FILES
         ./formats/parquet/parquet_cli_reader_test.cpp
         ./formats/parquet/parquet_ut_base.cpp
         ./formats/parquet/parquet_variant_test.cpp
+        ./formats/parquet/parquet_pos_reader_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/disk_range_test.cpp
@@ -496,6 +498,7 @@ SET(DW_TEST_FILES
     ./storage/hll_test.cpp
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
+    ./storage/index/builtin_inverted_index_test.cpp
     ./storage/key_coder_test.cpp
     ./storage/kv_store_test.cpp
     ./storage/lake/alter_tablet_meta_test.cpp
@@ -509,6 +512,7 @@ SET(DW_TEST_FILES
     ./storage/lake/filenames_test.cpp
     ./storage/lake/lake_data_source_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
+    ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./storage/lake/lake_scan_node_test.cpp
@@ -545,6 +549,7 @@ SET(DW_TEST_FILES
     ./storage/merge_iterator_test.cpp
     ./storage/metadata_util_test.cpp
     ./storage/meta_reader_test.cpp
+    ./storage/olap_meta_reader_test.cpp
     ./storage/olap_runtime_range_pruner_test.cpp
     ./storage/options_test.cpp
     ./storage/persistent_index_consistency_test.cpp

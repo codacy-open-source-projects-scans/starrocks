@@ -52,7 +52,7 @@ under the License.
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.5.5</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
-        <parquet.version>1.15.2</parquet.version>
+        <parquet.version>1.16.0</parquet.version>
         <hadoop.version>3.4.1</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <antlr.version>4.9.3</antlr.version>
@@ -592,6 +592,13 @@ under the License.
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
+                <version>1.7.30</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.slf4j/jul-to-slf4j -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>jul-to-slf4j</artifactId>
                 <version>1.7.30</version>
             </dependency>
 
