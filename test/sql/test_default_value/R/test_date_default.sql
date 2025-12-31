@@ -27,11 +27,23 @@ INSERT INTO users_basic VALUES
 ALTER TABLE users_basic ADD COLUMN birth_date DATE DEFAULT '2000-01-01';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN created_at DATETIME DEFAULT '2024-01-01 00:00:00';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN updated_at DATETIME DEFAULT '2024-12-17 10:00:00';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM users_basic ORDER BY id;
 -- result:
@@ -60,6 +72,33 @@ SELECT * FROM users_basic ORDER BY id;
 2	bob	2000-01-01	2024-01-01 00:00:00	2024-12-17 10:00:00
 3	charlie	2000-01-01	2024-01-01 00:00:00	2024-12-17 10:00:00
 4	david	1995-05-15	2024-06-01 12:30:00	2024-12-18 15:45:30
+-- !result
+CREATE TABLE products_with_key (
+    id INT NOT NULL,
+    name VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES(
+    "replication_num" = "1",
+    "fast_schema_evolution" = "false"
+);
+-- result:
+-- !result
+INSERT INTO products_with_key VALUES (1, 'product1'), (2, 'product2'), (3, 'product3');
+-- result:
+-- !result
+ALTER TABLE products_with_key 
+    ADD COLUMN launch_date DATE DEFAULT '2024-01-01',
+    ADD COLUMN last_updated DATETIME DEFAULT '2024-12-17 00:00:00';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT count(*) FROM products_with_key ORDER BY id;
+-- result:
+E: (1064, "Getting analyzing error at line 1, column 48. Detail message: '`test_date_comprehensive`.`products_with_key`.`id`' must be an aggregate expression or appear in GROUP BY clause.")
 -- !result
 CREATE TABLE orders_column_mode (
     order_id INT NOT NULL,
@@ -109,6 +148,10 @@ SELECT * FROM orders_column_mode ORDER BY order_id;
 -- !result
 ALTER TABLE orders_column_mode ADD COLUMN delivery_date DATE DEFAULT '2024-01-10';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 INSERT INTO orders_column_mode (order_id, customer_name) VALUES (6, 'frank');
 -- result:
@@ -172,6 +215,10 @@ SELECT * FROM users_pk_table ORDER BY user_id;
 ALTER TABLE users_pk_table ADD COLUMN account_expires DATE DEFAULT '2025-12-31';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO users_pk_table (user_id, username) VALUES (4, 'david');
 -- result:
 -- !result
@@ -210,6 +257,10 @@ INSERT INTO event_logs VALUES (1, 'event_1'), (2, 'event_2');
 -- !result
 ALTER TABLE event_logs ADD COLUMN event_date DATE DEFAULT '2024-01-01';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM event_logs ORDER BY log_id;
 -- result:
@@ -277,6 +328,10 @@ INSERT INTO sales_summary (product_id, region) VALUES (1, 'North'), (1, 'North')
 ALTER TABLE sales_summary ADD COLUMN first_sale_date DATE REPLACE DEFAULT '2023-01-01';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT * FROM sales_summary ORDER BY product_id, region;
 -- result:
 1	North	2024-01-01	0	2023-01-01
@@ -297,6 +352,10 @@ INSERT INTO inventory_items (item_id, item_name) VALUES (1, 'widget'), (2, 'gadg
 -- !result
 ALTER TABLE inventory_items ADD COLUMN expiry_date DATE DEFAULT '2025-12-31';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM inventory_items ORDER BY item_id;
 -- result:

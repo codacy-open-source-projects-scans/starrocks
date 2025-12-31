@@ -27,11 +27,23 @@ INSERT INTO users_basic VALUES
 ALTER TABLE users_basic ADD COLUMN flag_true BOOLEAN DEFAULT 'true';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN flag_false BOOLEAN DEFAULT 'false';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN flag_1 BOOLEAN DEFAULT '1';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE users_basic ADD COLUMN flag_0 BOOLEAN DEFAULT '0';
 -- result:
@@ -64,6 +76,57 @@ SELECT * FROM users_basic ORDER BY id;
 2	bob	1	0	1	0
 3	charlie	1	0	1	0
 4	david	0	1	0	1
+-- !result
+CREATE TABLE products_with_key (
+    id INT NOT NULL,
+    price INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES(
+    "replication_num" = "1",
+    "fast_schema_evolution" = "false"
+);
+-- result:
+-- !result
+INSERT INTO products_with_key VALUES (1, 100), (2, 200), (3, 300);
+-- result:
+-- !result
+ALTER TABLE products_with_key ADD COLUMN active BOOLEAN DEFAULT 'true';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT count(*) FROM products_with_key;
+-- result:
+3
+-- !result
+CREATE TABLE items_type_change (
+    id INT NOT NULL,
+    quantity SMALLINT,
+    available BOOLEAN DEFAULT 'true'
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES(
+    "replication_num" = "1",
+    "fast_schema_evolution" = "false"
+);
+-- result:
+-- !result
+INSERT INTO items_type_change VALUES (1, 10, 1), (2, 20, 0);
+-- result:
+-- !result
+ALTER TABLE items_type_change ADD COLUMN verified BOOLEAN DEFAULT '1';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT count(*) FROM items_type_change;
+-- result:
+2
 -- !result
 CREATE TABLE orders_column_mode (
     order_id INT NOT NULL,
@@ -112,6 +175,10 @@ SELECT * FROM orders_column_mode ORDER BY order_id;
 -- !result
 ALTER TABLE orders_column_mode ADD COLUMN is_delivered BOOLEAN DEFAULT '1';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 INSERT INTO orders_column_mode (order_id, product_name) VALUES (6, 'mouse');
 -- result:
@@ -175,6 +242,10 @@ SELECT * FROM users_pk_table ORDER BY user_id;
 ALTER TABLE users_pk_table ADD COLUMN is_premium BOOLEAN DEFAULT '1';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO users_pk_table (user_id, username) VALUES (4, 'david');
 -- result:
 -- !result
@@ -213,6 +284,10 @@ INSERT INTO event_logs VALUES (1, 'event_1'), (2, 'event_2');
 -- !result
 ALTER TABLE event_logs ADD COLUMN is_processed BOOLEAN DEFAULT 'false';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM event_logs ORDER BY log_id;
 -- result:
@@ -283,6 +358,10 @@ INSERT INTO sales_summary (product_id, region) VALUES (1, 'North'), (1, 'North')
 ALTER TABLE sales_summary ADD COLUMN is_verified BOOLEAN REPLACE DEFAULT 'false';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT * FROM sales_summary ORDER BY product_id, region;
 -- result:
 1	North	1	0	0
@@ -302,6 +381,10 @@ INSERT INTO inventory_items (item_id, item_name) VALUES (1, 'widget'), (2, 'gadg
 -- !result
 ALTER TABLE inventory_items ADD COLUMN is_discontinued BOOLEAN DEFAULT '0';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM inventory_items ORDER BY item_id;
 -- result:
