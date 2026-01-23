@@ -54,6 +54,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
+import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
@@ -412,6 +413,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LOW_CARDINALITY_OPTIMIZE_V2 = "low_cardinality_optimize_v2";
     public static final String LOW_CARDINALITY_OPTIMIZE_ON_LAKE = "low_cardinality_optimize_on_lake";
     public static final String ARRAY_LOW_CARDINALITY_OPTIMIZE = "array_low_cardinality_optimize";
+    public static final String ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_UNION_ALL =
+                    "enable_low_cardinality_optimize_for_union_all";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
@@ -578,6 +581,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_CONNECTOR_SINK_SPILL = "enable_connector_sink_spill";
     public static final String CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD = "connector_sink_spill_mem_limit_threshold";
+    public static final String CONNECTOR_SINK_SORT_SCOPE = "connector_sink_sort_scope";
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
@@ -1469,6 +1473,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double connectorSinkSpillMemLimitThreshold = 0.5;
 
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SORT_SCOPE)
+    private String connectorSinkSortScope = ConnectorSinkSortScope.FILE.scopeName();
+
     // execute sql don't return result, for performance test
     @VarAttr(name = ENABLE_EXECUTION_ONLY, flag = VariableMgr.INVISIBLE)
     private boolean enableExecutionOnly = false;
@@ -1720,6 +1727,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_JOIN)
     private boolean enableLowCardinalityOptimizeForJoin = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_UNION_ALL)
+    private boolean enableLowCardinalityOptimizeForUnionAll = true;
 
     @VariableMgr.VarAttr(name = LOW_CARDINALITY_OPTIMIZE_V2)
     private boolean useLowCardinalityOptimizeV2 = true;
@@ -2519,6 +2529,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getConnectorSinkTargetMaxFileSize() {
         return connectorSinkTargetMaxFileSize;
+    }
+
+    public String getConnectorSinkSortScope() {
+        return connectorSinkSortScope;
+    }
+
+    public void setConnectorSinkSortScope(String connectorSinkSortScope) {
+        this.connectorSinkSortScope = connectorSinkSortScope;
     }
 
     @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE)
@@ -4457,6 +4475,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableLowCardinalityOptimizeForJoin() {
         return enableLowCardinalityOptimizeForJoin;
+    }
+
+    public boolean isEnableLowCardinalityOptimizeForUnionAll() {
+        return enableLowCardinalityOptimizeForUnionAll;
+    }
+
+    public void setEnableLowCardinalityOptimizeForUnionAll(boolean enableLowCardinalityOptimizeForUnionAll) {
+        this.enableLowCardinalityOptimizeForUnionAll = enableLowCardinalityOptimizeForUnionAll;
     }
 
     public boolean isUseLowCardinalityOptimizeV2() {
