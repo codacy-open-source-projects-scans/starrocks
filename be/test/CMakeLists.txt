@@ -214,6 +214,7 @@ set(EXEC_FILES
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
+        ./formats/csv/output_stream_file_test.cpp
         ./formats/csv/date_converter_test.cpp
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp
@@ -385,6 +386,7 @@ set(EXEC_FILES
         ./util/json_flattener_test.cpp
         ./util/md5_test.cpp
         ./util/memcmp_test.cpp
+        ./util/metrics/file_scan_metrics_test.cpp
         ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp
         ./util/new_metrics_test.cpp
