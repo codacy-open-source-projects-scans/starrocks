@@ -243,6 +243,7 @@ import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -409,6 +410,7 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TableSampleClause;
+import com.starrocks.sql.ast.TabletGroupList;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.sql.ast.TagOptions;
 import com.starrocks.sql.ast.TaskName;
@@ -5239,6 +5241,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 createPos(context));
     }
 
+    @Override
+    public ParseNode visitMergeTabletClause(com.starrocks.sql.parser.StarRocksParser.MergeTabletClauseContext context) {
+        return new MergeTabletClause(
+                context.partitionNames() == null ? null : (PartitionRef) visit(context.partitionNames()),
+                context.tabletGroupList() == null ? null : (TabletGroupList) visit(context.tabletGroupList()),
+                getCaseSensitiveProperties(context.properties()),
+                createPos(context));
+    }
+
     // ---------Alter partition clause---------
 
     @Override
@@ -6454,6 +6465,20 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitTabletList(com.starrocks.sql.parser.StarRocksParser.TabletListContext context) {
         return new TabletList(context.INTEGER_VALUE().stream().map(ParseTree::getText)
                 .map(Long::parseLong).collect(toList()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitTabletGroupList(com.starrocks.sql.parser.StarRocksParser.TabletGroupListContext context) {
+        List<List<Long>> tabletIdGroups = new ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.Integer_listContext integerListContext :
+                context.integer_list()) {
+            List<Long> tabletIds = new ArrayList<>();
+            for (TerminalNode integerValueNode : integerListContext.INTEGER_VALUE()) {
+                tabletIds.add(Long.parseLong(integerValueNode.getText()));
+            }
+            tabletIdGroups.add(tabletIds);
+        }
+        return new TabletGroupList(tabletIdGroups, createPos(context));
     }
 
     @Override
@@ -7913,6 +7938,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         NodePosition pos = createPos(context);
         String functionName;
         boolean isGroupConcat = false;
+        boolean isStringAgg = false;
         boolean isLegacyGroupConcat = false;
         boolean isDistinct = false;
         if (context.aggregationFunction().COUNT() != null) {
@@ -7932,6 +7958,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
             isLegacyGroupConcat = SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY);
+        } else if (context.aggregationFunction().STRING_AGG() != null) {
+            // STRING_AGG is an alias for GROUP_CONCAT with PostgreSQL syntax
+            // STRING_AGG(expr, delimiter) -> GROUP_CONCAT(expr SEPARATOR delimiter)
+            functionName = FunctionSet.GROUP_CONCAT;
+            isGroupConcat = true;
+            isStringAgg = true;
         } else {
             functionName = FunctionSet.MAX;
         }
@@ -7953,7 +7985,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
         }
         List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);
-        if (isGroupConcat && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
+        if (isGroupConcat && !isStringAgg && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
             if (isLegacyGroupConcat) {
                 if (exprs.size() == 1) {
                     Expr sepExpr;
