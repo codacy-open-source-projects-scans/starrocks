@@ -415,6 +415,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LOW_CARDINALITY_OPTIMIZE_V2 = "low_cardinality_optimize_v2";
     public static final String LOW_CARDINALITY_OPTIMIZE_ON_LAKE = "low_cardinality_optimize_on_lake";
     public static final String ARRAY_LOW_CARDINALITY_OPTIMIZE = "array_low_cardinality_optimize";
+    public static final String STRUCT_LOW_CARDINALITY_OPTIMIZE = "struct_low_cardinality_optimize";
     public static final String ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_UNION_ALL =
                     "enable_low_cardinality_optimize_for_union_all";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
@@ -1748,6 +1749,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ARRAY_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableArrayLowCardinalityOptimize = true;
 
+    @VarAttr(name = STRUCT_LOW_CARDINALITY_OPTIMIZE)
+    private boolean enableStructLowCardinalityOptimize = true;
+
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
@@ -2294,6 +2298,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableArrayLowCardinalityOptimize() {
         return enableArrayLowCardinalityOptimize;
     }
+
+    public void setEnableStructLowCardinalityOptimize(boolean enableStructLowCardinalityOptimize) {
+        this.enableStructLowCardinalityOptimize = enableStructLowCardinalityOptimize;
+    }
+
+    public boolean isEnableStructLowCardinalityOptimize() {
+        return enableStructLowCardinalityOptimize;
+    }
+
 
     @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
     private boolean enableRewriteBitmapUnionToBitmapAgg = true;
@@ -4547,20 +4560,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableLowCardinalityOptimize = enableLowCardinalityOptimize;
     }
 
-    public boolean isEnableOptimizerSkewJoinByBroadCastSkewValues() {
-        return enableOptimizerSkewJoinByBroadCastSkewValues;
-    }
-
-    public void setEnableOptimizerSkewJoinByBroadCastSkewValues(boolean enableOptimizerSkewJoinByBroadCastSkewValues) {
+    public void setEnableOptimizerSkewJoinOptimizeV2(boolean enableOptimizerSkewJoinByBroadCastSkewValues) {
         this.enableOptimizerSkewJoinByBroadCastSkewValues = enableOptimizerSkewJoinByBroadCastSkewValues;
         this.enableOptimizerSkewJoinByQueryRewrite = !enableOptimizerSkewJoinByBroadCastSkewValues;
     }
 
-    public boolean isEnableOptimizerSkewJoinByQueryRewrite() {
-        return enableOptimizerSkewJoinByQueryRewrite;
+    public boolean isEnableOptimizerSkewJoinOptimizeV1() {
+        return enableOptimizerSkewJoinByQueryRewrite && !enableOptimizerSkewJoinByBroadCastSkewValues;
     }
 
-    public void setEnableOptimizerSkewJoinByQueryRewrite(boolean enableOptimizerSkewJoinByQueryRewrite) {
+    public boolean isEnableOptimizerSkewJoinOptimizeV2() {
+        return enableOptimizerSkewJoinByBroadCastSkewValues;
+    }
+
+    public void setEnableOptimizerSkewJoinOptimizeV1(boolean enableOptimizerSkewJoinByQueryRewrite) {
         this.enableOptimizerSkewJoinByQueryRewrite = enableOptimizerSkewJoinByQueryRewrite;
         this.enableOptimizerSkewJoinByBroadCastSkewValues = !enableOptimizerSkewJoinByQueryRewrite;
     }
