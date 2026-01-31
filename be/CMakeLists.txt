@@ -393,7 +393,6 @@ set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
-    Gutil
     ${WL_START_GROUP}
     Agent
     Common
@@ -414,7 +413,6 @@ set(STARROCKS_LINK_LIBS
     Udf
     Util
     Script
-    StarRocksGen
     Webserver
     TestUtil
     Tools
@@ -422,6 +420,9 @@ set(STARROCKS_LINK_LIBS
     Simd
     Cache
     ${WL_END_GROUP}
+    Base
+    Gutil
+    StarRocksGen
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
@@ -724,6 +725,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 ENDFUNCTION()
 
 add_subdirectory(${SRC_DIR}/agent)
+add_subdirectory(${SRC_DIR}/base)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
