@@ -15,18 +15,27 @@
 set(BASE_TEST_FILES
     cxa_throw_wrap.cpp
     bit/bit_mask_test.cpp
+    bit/bit_packing_simd_test.cpp
+    bit/bit_packing_test.cpp
+    bit/bit_stream_utils_test.cpp
+    bit/bit_util_test.cpp
     concurrency/await_test.cpp
     concurrency/blocking_queue_test.cpp
     concurrency/concurrent_limiter_test.cpp
     concurrency/shared_mutex_test.cpp
     container/heap_test.cpp
     container/priority_queue_test.cpp
+    coding_test.cpp
+    phmap_test.cpp
     crypto/md5_test.cpp
     json/easy_json-test.cpp
     path/file_util_test.cpp
     path/path_util_test.cpp
     path/path_trie_test.cpp
     simd/byte_stream_split_test.cpp
+    simd/batch_run_counter_test.cpp
+    simd/simd_expand_test.cpp
+    simd/simd_test.cpp
     string/c_string_test.cpp
     string/faststring_test.cpp
     string/memcmp_test.cpp
@@ -36,6 +45,10 @@ set(BASE_TEST_FILES
     uuid/uuid_generator_test.cpp
     status_test.cpp
 )
+
+if (USE_AVX512)
+    list(APPEND BASE_TEST_FILES simd/delta_decode_test.cpp)
+endif()
 
 set(BASE_TEST_LINK_LIBS
     Base

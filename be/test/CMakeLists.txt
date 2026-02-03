@@ -24,14 +24,9 @@ set(EXEC_FILES
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
-        ./common/cow_test.cpp
         ./column/schema_test.cpp
         ./column/column_cow_test.cpp
-        ./common/config_test.cpp
-        ./common/process_exit_test.cpp
-        ./common/tracer_test.cpp
         ./common/uri_test.cpp
-        ./common/cow_test.cpp
         ./connector/benchmark_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
@@ -344,17 +339,11 @@ set(EXEC_FILES
         ./types/type_checker_test.cpp
         ./types/type_checker_xml_loader_test.cpp 
         ./types/variant_value_test.cpp
-        ./simd/batch_run_counter_test.cpp
-        ./simd/simd_test.cpp
-        ./simd/simd_selector_test.cpp
-        ./simd/simd_mulselector_test.cpp
-        ./simd/simd_expand_test.cpp
-        ./util/phmap_test.cpp
+        ./column/simd_selector_test.cpp
+        ./column/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
         ./util/base85_test.cpp
         ./util/bitmap_test.cpp
-        ./util/bit_stream_utils_test.cpp
-        ./util/bit_util_test.cpp
         ./util/block_compression_test.cpp
         ./util/brpc_stub_cache_test.cpp
         ./util/bthreads/future_test.cpp
@@ -364,7 +353,6 @@ set(EXEC_FILES
         ./util/bthreads/single_flight_test.cpp
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
-        ./util/coding_test.cpp
         ./util/core_local_test.cpp
         ./util/core_local_counter_test.cpp
         ./util/countdown_latch_test.cpp
@@ -384,7 +372,7 @@ set(EXEC_FILES
         ./util/parse_util_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/runtime_profile_test.cpp
-        ./util/raw_container_test.cpp
+        ./base/raw_container_test.cpp
         ./util/string_parser_test.cpp
         ./util/string_util_test.cpp
         ./util/tdigest_test.cpp
@@ -396,8 +384,6 @@ set(EXEC_FILES
         ./util/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp
-        ./util/bit_packing_test.cpp
-        ./util/bit_packing_simd_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
@@ -431,22 +417,19 @@ set(EXEC_FILES
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
+        ./util/cow_test.cpp
         ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
         ./util/llm_cache_test.cpp
         ./util/llm_query_service_test.cpp
         )
 
-if (${USE_AVX512})
-    list(APPEND EXEC_FILES ./simd/delta_decode_test.cpp)
-endif()
-
-
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif ()
 
 add_subdirectory(base)
+add_subdirectory(common)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)

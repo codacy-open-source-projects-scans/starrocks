@@ -30,7 +30,6 @@ set(UTIL_FILES
   compression/compression_context_pool_singletons.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
-  coding.cpp
   cpu_info.cpp
   cpu_usage_info.cpp
   cpu_util.cpp
@@ -105,6 +104,10 @@ set(UTIL_FILES
   llm_query_service.cpp
   variant.cpp
 )
+
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    list(APPEND UTIL_FILES minidump.cpp)
+endif()
 
 ADD_BE_LIB(Util
     ${UTIL_FILES}
