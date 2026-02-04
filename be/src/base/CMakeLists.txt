@@ -24,6 +24,7 @@ ADD_BE_LIB(Base
   gc/gc_helper_smoothstep.cpp
   hash/crc32c_sse_simd.cpp
   hash/murmur_hash3.cpp
+  int256.cpp
   json/easy_json.cc
   path/file_util.cpp
   path/path_builder.cpp
@@ -35,6 +36,9 @@ ADD_BE_LIB(Base
   string/slice.cpp
   string/utf8_check.cpp
   system/errno.cpp
+  time/monotime.cpp
+  time/time.cpp
+  time/timezone_utils.cpp
   template/mustache/mustache.cc
   testutil/assert.cpp
   testutil/sync_point.cc

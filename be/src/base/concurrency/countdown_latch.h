@@ -34,12 +34,13 @@
 
 #pragma once
 
+#include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
 
-#include "common/logging.h"
-#include "storage/olap_define.h"
-#include "util/monotime.h"
+#include "base/logging.h"
+#include "base/time/monotime.h"
 
 namespace starrocks {
 
