@@ -23,8 +23,11 @@ ADD_BE_LIB(Base
   coding.cpp
   gc/gc_helper_smoothstep.cpp
   hash/crc32c_sse_simd.cpp
+  hash/hash_util.cpp
   hash/murmur_hash3.cpp
-  int256.cpp
+  types/decimal12.cpp
+  types/int256.cpp
+  types/int96.cpp
   json/easy_json.cc
   path/file_util.cpp
   path/path_builder.cpp

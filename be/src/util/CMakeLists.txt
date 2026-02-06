@@ -74,7 +74,6 @@ set(UTIL_FILES
   threadpool.cpp
   trace.cpp
   trace_metrics.cpp
-  int96.cpp
   hdfs_util.cpp
   gc_helper.cpp
   lru_cache.cpp
@@ -84,7 +83,6 @@ set(UTIL_FILES
   failpoint/fail_point.cpp
   bthreads/future.h
   bthreads/future_impl.cpp
-  hash_util.cpp
   debug_action.cpp
   memory_lock.cpp
   internal_service_recoverable_stub.cpp
