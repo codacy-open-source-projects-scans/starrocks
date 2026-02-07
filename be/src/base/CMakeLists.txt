@@ -16,6 +16,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
 ADD_BE_LIB(Base
   concurrency/await.cpp
+  concurrency/core_local.cpp
   concurrency/spinlock.cpp
   crypto/md5.cpp
   crypto/sha.cpp
@@ -26,6 +27,7 @@ ADD_BE_LIB(Base
   hash/hash_util.cpp
   hash/murmur_hash3.cpp
   types/decimal12.cpp
+  types/int128.cpp
   types/int256.cpp
   types/int96.cpp
   json/easy_json.cc
@@ -35,6 +37,7 @@ ADD_BE_LIB(Base
   random/random.cc
   simd/expand.cpp
   stats/ndv_estimator.cpp
+  metrics.cpp
   string/faststring.cc
   string/string_parser.cpp
   string/slice.cpp

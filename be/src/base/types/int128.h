@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstddef>
+#include <istream>
 #include <ostream>
 #include <string>
 
@@ -24,13 +26,16 @@ namespace starrocks {
 using int128_t = __int128;
 using uint128_t = unsigned __int128;
 
-class LargeIntValue {
-public:
-    static std::string to_string(__int128 value) { return integer_to_string<__int128>(value); }
-};
+inline std::string int128_to_string(__int128 value) {
+    return integer_to_string<__int128>(value);
+}
 
 inline std::ostream& operator<<(std::ostream& os, __int128 const& value) {
-    return os << LargeIntValue::to_string(value);
+    return os << int128_to_string(value);
 }
+
+std::istream& operator>>(std::istream& is, __int128& value);
+
+std::size_t hash_value(__int128 const& value);
 
 } // namespace starrocks

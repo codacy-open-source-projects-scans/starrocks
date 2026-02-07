@@ -13,7 +13,6 @@ set(EXEC_FILES
         ./column/column_helper_test.cpp
         ./column/const_column_test.cpp
         ./column/copied_datum_test.cpp
-        ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
         ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
@@ -23,7 +22,6 @@ set(EXEC_FILES
         ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
-        ./column/timestamp_value_test.cpp
         ./column/schema_test.cpp
         ./column/column_cow_test.cpp
         ./common/uri_test.cpp
@@ -289,9 +287,6 @@ set(EXEC_FILES
         ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
-        ./runtime/datetime_value_test.cpp
-        ./runtime/decimalv2_value_test.cpp
-        ./runtime/decimalv3_test.cpp
         ./runtime/diagnose_daemon_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
@@ -300,7 +295,6 @@ set(EXEC_FILES
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/local_tablets_channel_test.cpp
         ./runtime/lake_tablets_channel_test.cpp
-        ./runtime/large_int_value_test.cpp
         ./runtime/load_channel_test.cpp
         ./runtime/load_channel_mgr_test.cpp
         ./runtime/memory/mem_chunk_allocator_test.cpp
@@ -351,8 +345,6 @@ set(EXEC_FILES
         ./util/bthreads/single_flight_test.cpp
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
-        ./util/core_local_test.cpp
-        ./util/core_local_counter_test.cpp
         ./util/cpu_info_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
@@ -364,7 +356,6 @@ set(EXEC_FILES
         ./util/json_flattener_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
         ./util/mysql_row_buffer_test.cpp
-        ./util/new_metrics_test.cpp
         ./util/parse_util_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/runtime_profile_test.cpp
