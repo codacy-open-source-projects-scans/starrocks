@@ -14,18 +14,22 @@
 
 #pragma once
 
-#include <limits>
-#include <string>
-
-#include "column/column.h"
-#include "common/status.h"
+#ifdef __APPLE__
 #include "simdjson.h"
-#include "types/type_descriptor.h"
+#else
+#include "simdjson/ondemand.h"
+#endif
+
+#include "common/statusor.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 
-template <typename T>
-Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                          simdjson::ondemand::value* value);
+using SimdJsonValue = simdjson::ondemand::value;
+using SimdJsonObject = simdjson::ondemand::object;
+
+// Convert SIMD-JSON object/value to a JsonValue.
+StatusOr<JsonValue> convert_from_simdjson(SimdJsonValue value);
+StatusOr<JsonValue> convert_from_simdjson(SimdJsonObject value);
 
 } // namespace starrocks

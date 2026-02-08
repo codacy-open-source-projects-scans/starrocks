@@ -314,7 +314,6 @@ set(EXEC_FILES
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/time_bounded_stream_load_pipe_test.cpp
-        ./runtime/type_descriptor_test.cpp
         ./runtime/user_function_cache_test.cpp
         ./runtime/sorted_chunks_merger_test.cpp
         ./runtime/merge_cascade_test.cpp
@@ -327,10 +326,8 @@ set(EXEC_FILES
         ./runtime/query_statistics_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
-        ./types/bitmap_value_test.cpp
         ./types/type_checker_test.cpp
         ./types/type_checker_xml_loader_test.cpp 
-        ./types/variant_value_test.cpp
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
@@ -361,7 +358,6 @@ set(EXEC_FILES
         ./util/runtime_profile_test.cpp
         ./base/raw_container_test.cpp
         ./util/string_util_test.cpp
-        ./util/tdigest_test.cpp
         ./util/thread_test.cpp
         ./util/threadpool_test.cpp
         ./util/thrift_customize_test.cpp
@@ -382,7 +378,6 @@ set(EXEC_FILES
         ./util/download_util_test.cpp
         ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
-        ./util/url_coding_test.cpp
         ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
@@ -459,7 +454,6 @@ SET(DW_TEST_FILES
     ./storage/fast_schema_evolution_test.cpp
     ./storage/file_utils_test.cpp
     ./storage/get_use_pk_index_test.cpp
-    ./storage/hll_test.cpp
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
     ./storage/index/builtin_inverted_index_test.cpp

@@ -38,10 +38,10 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/status.h"
-#include "runtime/types.h"
 #include "storage/types.h"
 #include "types/time_types.h"
-#include "util/variant.h"
+#include "types/type_descriptor.h"
+#include "types/variant.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
