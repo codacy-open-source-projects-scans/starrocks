@@ -12,10 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/memory/column_allocator.h"
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+
+#include "runtime/mem_pool.h"
+#include "types/type_info_allocator.h"
 
 namespace starrocks {
 
-MemHookAllocator kDefaultColumnAllocator = MemHookAllocator{};
-
+inline uint8_t* type_info_allocate_from_mem_pool(void* ctx, size_t size) {
+    auto* mem_pool = static_cast<MemPool*>(ctx);
+    return mem_pool->allocate(size);
 }
+
+inline TypeInfoAllocator make_type_info_allocator(MemPool* mem_pool) {
+    return TypeInfoAllocator{mem_pool, type_info_allocate_from_mem_pool};
+}
+
+} // namespace starrocks

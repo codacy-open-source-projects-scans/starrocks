@@ -14,13 +14,18 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
+add_library(ColumnCore STATIC
+        column.cpp
+        column_visitor.cpp
+        column_visitor_mutable.cpp
+)
+
 add_library(Column STATIC
         array_column.cpp
         array_view_column.cpp
         adaptive_nullable_column.cpp
         chunk.cpp
         chunk_extra_data.cpp
-        column.cpp
         column_access_path.cpp
         column_helper.cpp
         append_with_mask.cpp
@@ -36,8 +41,6 @@ add_library(Column STATIC
         binary_column.cpp
         object_column.cpp
         decimalv3_column.cpp
-        column_visitor.cpp
-        column_visitor_mutable.cpp
         json_column.cpp
         map_column.cpp
         struct_column.cpp
@@ -49,3 +52,5 @@ add_library(Column STATIC
         german_string.cpp
         column_hash/column_hash.cpp
 )
+
+target_link_libraries(Column PUBLIC ColumnCore)

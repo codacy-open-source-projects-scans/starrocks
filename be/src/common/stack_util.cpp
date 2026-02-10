@@ -12,14 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "common/stack_util.h"
 
-#include "storage/types.h"
+namespace google {
+std::string GetStackTrace();
+}
 
 namespace starrocks {
 
-TypeInfoPtr get_decimal_type_info(LogicalType type, int precision, int scale);
-
-std::string get_decimal_zone_map_string(TypeInfo* type_info, const void* value);
+std::string get_stack_trace() {
+    return google::GetStackTrace();
+}
 
 } // namespace starrocks
