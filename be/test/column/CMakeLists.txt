@@ -15,8 +15,21 @@
 set(COLUMN_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     column_base_test.cpp
+    mysql_row_buffer_test.cpp
+    german_string_test.cpp
+    object_column_core_test.cpp
+    variant_column_test.cpp
     column_visitor_test.cpp
+    column_filter_range_test.cpp
+    fixed_length_column_core_test.cpp
     column_hash_stub.cpp
+    binary_column_core_test.cpp
+    const_nullable_core_test.cpp
+    nullable_column_core_test.cpp
+    decimalv3_json_core_test.cpp
+    adaptive_nullable_column_core_test.cpp
+    column_view_base_core_test.cpp
+    type_traits_core_test.cpp
 )
 
 set(COLUMN_TEST_LINK_LIBS

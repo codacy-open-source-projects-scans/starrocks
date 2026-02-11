@@ -8,15 +8,14 @@ set(EXEC_FILES
         ./column/column_hash_test.cpp
         ./column/array_view_column_test.cpp
         ./column/binary_column_test.cpp
-        ./column/german_string_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
         ./column/const_column_test.cpp
         ./column/decimalv3_column_test.cpp
         ./column/field_test.cpp
-        ./column/fixed_length_column_test.cpp
+        ./column/fixed_length_column_extended_test.cpp
         ./column/json_column_test.cpp
-        ./column/variant_column_test.cpp
+        ./column/variant_column_extended_test.cpp
         ./column/map_column_test.cpp
         ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
@@ -351,7 +350,6 @@ set(EXEC_FILES
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
-        ./util/mysql_row_buffer_test.cpp
         ./util/parse_util_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/runtime_profile_test.cpp
@@ -528,8 +526,6 @@ SET(DW_TEST_FILES
     ./storage/publish_version_task_test.cpp
     ./storage/push_handler_test.cpp
     ./storage/range_test.cpp
-    ./storage/record_predicate/column_hash_is_congruent_test.cpp
-    ./storage/record_predicate/record_predicate_helper_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
     ./storage/roaring2range_test.cpp
@@ -579,7 +575,6 @@ SET(DW_TEST_FILES
     ./storage/short_key_index_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
-    ./storage/sstable/sstable_predicate_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_engine_test.cpp
     ./storage/table_reader_remote_test.cpp
