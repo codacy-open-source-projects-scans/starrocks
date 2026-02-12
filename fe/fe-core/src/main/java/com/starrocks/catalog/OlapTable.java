@@ -126,6 +126,7 @@ import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TPersistentIndexType;
+import com.starrocks.thrift.TPrimaryKeyEncodingType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -411,7 +412,7 @@ public class OlapTable extends Table {
             olapTable.defaultDistributionInfo = this.defaultDistributionInfo.copy();
         }
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
-        Map<String, Partition> nameToPartitions = Maps.newLinkedHashMap();
+        Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
             Partition copiedPartition = kv.getValue().shallowCopy();
             idToPartitions.put(kv.getKey(), copiedPartition);
@@ -3369,5 +3370,17 @@ public class OlapTable extends Table {
 
     public boolean isRangeDistribution() {
         return defaultDistributionInfo instanceof RangeDistributionInfo;
+    }
+
+    public TPrimaryKeyEncodingType getPrimaryKeyEncodingType() {
+        if (getKeysType() != KeysType.PRIMARY_KEYS) {
+            return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE;
+        }
+
+        if (!isCloudNativeTableOrMaterializedView()) {
+            return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
+        }
+
+        return isRangeDistribution() ? TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2 : TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
     }
 }
