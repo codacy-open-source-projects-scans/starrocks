@@ -17,6 +17,25 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
+set(RUNTIME_CORE_FILES
+    current_thread.cpp
+    mem_tracker.cpp
+)
+
+ADD_BE_LIB(RuntimeCore
+    ${RUNTIME_CORE_FILES}
+)
+
+target_link_libraries(RuntimeCore PUBLIC
+    ChunkCore
+    ColumnCore
+    TypesCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
@@ -43,7 +62,6 @@ set(RUNTIME_FILES
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
     agg_state_desc.cpp
-    mem_tracker.cpp
     data_stream_recvr.cpp
     export_sink.cpp
     load_channel_mgr.cpp
@@ -88,7 +106,6 @@ set(RUNTIME_FILES
     global_dict/parser.cpp
     global_dict/miscs.cpp
     global_dict/types.cpp
-    current_thread.cpp
     runtime_filter_cache.cpp
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
@@ -116,3 +133,5 @@ set(RUNTIME_FILES ${RUNTIME_FILES}
 ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
+
+target_link_libraries(Runtime PUBLIC RuntimeCore)

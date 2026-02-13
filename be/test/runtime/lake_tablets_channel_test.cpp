@@ -17,9 +17,11 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "base/bthreads/util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
@@ -44,8 +46,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
-#include "util/bthreads/util.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

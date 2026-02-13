@@ -15,17 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "service/backend_options.h"
+#include "common/system/backend_options.h"
 
 #include <algorithm>
 #include <ostream>
 
+#include "base/network/cidr.h"
+#include "base/network/network_util.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"
-#include "util/cidr.h"
-#include "util/network_util.h"
 
 namespace starrocks {
 

@@ -55,9 +55,11 @@
 #include <cstring>
 #include <filesystem>
 
+#include "base/network/network_util.h"
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
+#include "common/system/backend_options.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
@@ -66,7 +68,6 @@
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/user_function_cache.h"
-#include "service/backend_options.h"
 #include "service/mem_hook.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
@@ -75,7 +76,6 @@
 #include "util/logging.h"
 #include "util/memory_lock.h"
 #include "util/misc.h"
-#include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/thrift_util.h"

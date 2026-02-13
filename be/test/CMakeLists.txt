@@ -298,7 +298,6 @@ set(EXEC_FILES
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/memory/counting_allocator_test.cpp
         ./runtime/mem_pool_test.cpp
-        ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
@@ -331,11 +330,6 @@ set(EXEC_FILES
         ./util/bitmap_test.cpp
         ./util/block_compression_test.cpp
         ./util/brpc_stub_cache_test.cpp
-        ./util/bthreads/future_test.cpp
-        ./util/bthreads/promise_test.cpp
-        ./util/bthreads/semaphore_test.cpp
-        ./util/bthreads/shared_future_test.cpp
-        ./util/bthreads/single_flight_test.cpp
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
         ./util/cpu_info_test.cpp
@@ -356,7 +350,6 @@ set(EXEC_FILES
         ./util/threadpool_test.cpp
         ./util/thrift_customize_test.cpp
         ./util/trace_test.cpp
-        ./util/uid_util_test.cpp
         ./base/types/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp
@@ -405,6 +398,7 @@ add_subdirectory(base)
 add_subdirectory(common)
 add_subdirectory(column)
 add_subdirectory(types)
+add_subdirectory(runtime)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
