@@ -12,18 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "common/system/cpu_usage_info.h"
 
-#include <memory>
+#include <gtest/gtest.h>
 
-#include "gen_cpp/lake_types.pb.h"
+#include "base/testutil/parallel_test.h"
 
 namespace starrocks {
 
-using TabletMetadata = TabletMetadataPB;
-using TabletMetadataPtr = std::shared_ptr<const TabletMetadata>;
-using MutableTabletMetadataPtr = std::shared_ptr<TabletMetadata>;
-using BundleTabletMetadataPtr = std::shared_ptr<BundleTabletMetadataPB>;
-using TabletMetadataPtrs = std::vector<TabletMetadataPtr>;
+PARALLEL_TEST(CpuUsageRecorderTest, normal) {
+    CpuUsageRecorder recorder;
+    ASSERT_EQ(0, recorder.cpu_used_permille());
+
+    recorder.update_interval();
+    int cpu_used_permille = recorder.cpu_used_permille();
+    ASSERT_GE(cpu_used_permille, 0);
+}
 
 } // namespace starrocks
