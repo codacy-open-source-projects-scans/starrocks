@@ -47,11 +47,13 @@
 
 #include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/status.h"
 #include "common/thread/thread.h"
+#include "common/util/bthreads/executor.h"
 #include "cumulative_compaction.h"
 #include "fs/fd_cache.h"
 #include "fs/fs_util.h"
@@ -80,11 +82,9 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
-#include "util/bthreads/executor.h"
 #include "util/global_metrics_registry.h"
 #include "util/lru_cache.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/trace.h"
 
 namespace starrocks {
 
