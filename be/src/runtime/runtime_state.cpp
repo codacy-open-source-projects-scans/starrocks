@@ -34,7 +34,6 @@
 
 #include "runtime/runtime_state.h"
 
-#include <cstring>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -46,7 +45,7 @@
 #include "common/constexpr.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "runtime/exec_env.h"
+#include "runtime/global_dict/context.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_helper.h"
 #include "types/datetime_value.h"
@@ -54,7 +53,9 @@
 namespace starrocks {
 
 // for ut only
-RuntimeState::RuntimeState() : _obj_pool(new ObjectPool()) {}
+RuntimeState::RuntimeState() : _obj_pool(new ObjectPool()) {
+    _global_dict_ctx = std::make_unique<GlobalDictContext>();
+}
 
 // for ut only
 RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -69,6 +70,7 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
+    _global_dict_ctx = std::make_unique<GlobalDictContext>();
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
     _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, exec_env);
@@ -86,6 +88,7 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
+    _global_dict_ctx = std::make_unique<GlobalDictContext>();
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
     _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, exec_env);
@@ -93,6 +96,7 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
         : _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
+    _global_dict_ctx = std::make_unique<GlobalDictContext>();
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
@@ -119,6 +123,7 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
 }
 
 RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
+    _global_dict_ctx = std::make_unique<GlobalDictContext>();
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
@@ -128,7 +133,9 @@ RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
 
 RuntimeState::~RuntimeState() {
     // dict exprs
-    _dict_optimize_parser.close();
+    if (_global_dict_ctx != nullptr) {
+        _global_dict_ctx->close(this);
+    }
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
         _error_log_file->close();
@@ -202,10 +209,6 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
     RuntimeProfile::Counter* mem_tracker_counter =
             ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(mem_tracker_counter, bytes_limit);
-
-    if (parent == nullptr) {
-        parent = GlobalEnv::GetInstance()->query_pool_mem_tracker();
-    }
 
     _query_mem_tracker =
             std::make_shared<MemTracker>(MemTrackerType::QUERY, bytes_limit, runtime_profile()->name(), parent);
@@ -296,71 +299,6 @@ bool RuntimeState::has_reached_max_error_msg_num(bool is_summary) {
     }
 }
 
-void RuntimeState::append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary) {
-    std::lock_guard<std::mutex> l(_error_log_lock);
-    if (_query_options.query_type != TQueryType::LOAD) {
-        return;
-    }
-    // If file havn't been opened, open it here
-    if (_error_log_file == nullptr) {
-        Status status = RuntimeStateHelper::create_error_log_file(this);
-        if (!status.ok()) {
-            LOG(WARNING) << "Create error file log failed. because: " << status.message();
-            if (_error_log_file != nullptr) {
-                _error_log_file->close();
-                delete _error_log_file;
-                _error_log_file = nullptr;
-            }
-            return;
-        }
-    }
-
-    // if num of printed error row exceeds the limit, and this is not a summary message,
-    // return
-    if (_num_print_error_rows.fetch_add(1, std::memory_order_relaxed) > MAX_ERROR_NUM && !is_summary) {
-        return;
-    }
-
-    std::stringstream out;
-    if (is_summary) {
-        out << "Error: ";
-        out << error_msg;
-    } else {
-        // Note: export reason first in case src line too long and be truncated.
-        out << "Error: " << error_msg << ". Row: " << line;
-    }
-
-    if (!out.str().empty()) {
-        (*_error_log_file) << out.str() << std::endl;
-    }
-}
-
-void RuntimeState::append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
-                                                  const std::string& source) {
-    std::lock_guard<std::mutex> l(_rejected_record_lock);
-    // Only load job need to write rejected record
-    if (_query_options.query_type != TQueryType::LOAD) {
-        return;
-    }
-
-    // If file havn't been opened, open it here
-    if (_rejected_record_file == nullptr) {
-        Status status = RuntimeStateHelper::create_rejected_record_file(this);
-        if (!status.ok()) {
-            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
-            if (_rejected_record_file != nullptr) {
-                _rejected_record_file->close();
-                _rejected_record_file.reset();
-            }
-            return;
-        }
-    }
-    _num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
-
-    // TODO(meegoo): custom delimiter
-    (*_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
-}
-
 int64_t RuntimeState::get_load_mem_limit() const {
     if (_query_options.__isset.load_mem_limit && _query_options.load_mem_limit > 0) {
         return _query_options.load_mem_limit;
@@ -369,57 +307,35 @@ int64_t RuntimeState::get_load_mem_limit() const {
 }
 
 const GlobalDictMaps& RuntimeState::get_query_global_dict_map() const {
-    return _query_global_dicts;
+    return _global_dict_ctx->query_global_dicts();
 }
 
 const GlobalDictMaps& RuntimeState::get_load_global_dict_map() const {
-    return _load_global_dicts;
+    return _global_dict_ctx->load_global_dicts();
 }
 
 GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
-    return &_query_global_dicts;
+    return _global_dict_ctx->mutable_query_global_dicts();
 }
 
 DictOptimizeParser* RuntimeState::mutable_dict_optimize_parser() {
-    return &_dict_optimize_parser;
+    return _global_dict_ctx->mutable_dict_optimize_parser();
+}
+
+const phmap::flat_hash_map<uint32_t, int64_t>& RuntimeState::load_dict_versions() const {
+    return _global_dict_ctx->load_dict_versions();
 }
 
 Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
-    RETURN_IF_ERROR(_build_global_dict(global_dict_list, &_query_global_dicts, nullptr));
-    _dict_optimize_parser.set_mutable_dict_maps(this, &_query_global_dicts);
-    return Status::OK();
+    return _global_dict_ctx->init_query_global_dict(this, global_dict_list);
 }
 
 Status RuntimeState::init_query_global_dict_exprs(const std::map<int, TExpr>& exprs) {
-    return _dict_optimize_parser.init_dict_exprs(exprs);
+    return _global_dict_ctx->init_query_global_dict_exprs(this, exprs);
 }
 
 Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
-    return _build_global_dict(global_dict_list, &_load_global_dicts, &_load_dict_versions);
-}
-
-Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
-                                        phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_version) {
-    for (const auto& global_dict : global_dict_list) {
-        DCHECK_EQ(global_dict.ids.size(), global_dict.strings.size());
-        GlobalDictMap dict_map;
-        RGlobalDictMap rdict_map;
-        int dict_sz = global_dict.ids.size();
-        for (int i = 0; i < dict_sz; ++i) {
-            const std::string& dict_key = global_dict.strings[i];
-            auto* data = _instance_mem_pool->allocate(dict_key.size());
-            RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
-            memcpy(data, dict_key.data(), dict_key.size());
-            Slice slice(data, dict_key.size());
-            dict_map.emplace(slice, global_dict.ids[i]);
-            rdict_map.emplace(global_dict.ids[i], slice);
-        }
-        result->emplace(uint32_t(global_dict.columnId), std::make_pair(std::move(dict_map), std::move(rdict_map)));
-        if (column_id_to_version != nullptr) {
-            column_id_to_version->emplace(uint32_t(global_dict.columnId), global_dict.version);
-        }
-    }
-    return Status::OK();
+    return _global_dict_ctx->init_load_global_dict(this, global_dict_list);
 }
 
 Status RuntimeState::reset_epoch() {

@@ -55,7 +55,6 @@ set(RUNTIME_FILES
     multi_cast_data_stream_sink.cpp
     descriptors_ext.cpp
     exec_env.cpp
-    exec.cpp
     global_variables.cpp
     user_function_cache.cpp
     jdbc_driver_manager.cpp
@@ -106,6 +105,7 @@ set(RUNTIME_FILES
     tablets_channel.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
+    global_dict/context.cpp
     global_dict/parser.cpp
     global_dict/miscs.cpp
     global_dict/types.cpp

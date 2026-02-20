@@ -19,6 +19,7 @@ ADD_BE_LIB(Base
   concurrency/await.cpp
   concurrency/core_local.cpp
   concurrency/spinlock.cpp
+  container/lru_cache.cpp
   crypto/aes_util.cpp
   crypto/md5.cpp
   crypto/sha.cpp
@@ -37,6 +38,7 @@ ADD_BE_LIB(Base
   hash/murmur_hash3.cpp
   failpoint/fail_point.cpp
   path/filesystem_util.cc
+  process/lite_exec.cpp
   types/decimal12.cpp
   types/int128.cpp
   types/int256.cpp

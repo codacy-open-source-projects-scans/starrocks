@@ -309,7 +309,6 @@ set(EXEC_FILES
         ./runtime/memory_scratch_sink_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
-        ./runtime/exec_sub_process_test.cpp
         ./runtime/load_fail_point_test.cpp
         ./runtime/query_statistics_test.cpp
         ./serde/column_array_serde_test.cpp
@@ -335,7 +334,6 @@ set(EXEC_FILES
         ./base/types/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp
-        ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
         ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp

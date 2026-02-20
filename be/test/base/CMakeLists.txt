@@ -26,6 +26,9 @@ set(BASE_TEST_FILES
     bthreads/semaphore_test.cpp
     bthreads/shared_future_test.cpp
     bthreads/single_flight_test.cpp
+    brpc/ref_count_closure_test.cpp
+    brpc/recoverable_closure_test.cpp
+    brpc/reusable_closure_test.cpp
     concurrency/await_test.cpp
     concurrency/blocking_queue_test.cpp
     concurrency/concurrent_limiter_test.cpp
@@ -34,6 +37,7 @@ set(BASE_TEST_FILES
     concurrency/shared_mutex_test.cpp
     concurrency/core_local_test.cpp
     container/heap_test.cpp
+    lru_cache_test.cpp
     container/priority_queue_test.cpp
     coding_test.cpp
     core_local_counter_test.cpp
@@ -57,6 +61,7 @@ set(BASE_TEST_FILES
     path/path_builder_test.cpp
     path/path_util_test.cpp
     path/path_trie_test.cpp
+    process/lite_exec_test.cpp
     random/random_test.cpp
     simd/byte_stream_split_test.cpp
     simd/batch_run_counter_test.cpp
