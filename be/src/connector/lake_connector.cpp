@@ -21,8 +21,10 @@
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
 #include "runtime/current_thread.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/parser.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
@@ -208,7 +210,9 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
 // mapping a slot-column-id to schema-columnid
 Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
-    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
+    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
     auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
@@ -716,7 +720,10 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
     RETURN_IF_ERROR(_conjuncts_manager->get_key_ranges(&_key_ranges));
     _conjuncts_manager->get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_not_push_down_conjuncts));
+    auto* fragment_dict_state = state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    RETURN_IF_ERROR(
+            fragment_dict_state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_not_push_down_conjuncts));
 
     int scanners_per_tablet = 64;
     int num_ranges = _key_ranges.size();
@@ -1088,7 +1095,7 @@ Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
         const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
         _partition_exprs.resize(bucket_exprs.size());
         for (int i = 0; i < bucket_exprs.size(); ++i) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
         }
     }
     return Status::OK();

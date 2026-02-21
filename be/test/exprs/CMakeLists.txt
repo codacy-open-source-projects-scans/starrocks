@@ -12,19 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(RUNTIME_CORE_TEST_FILES
+set(EXPR_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
-    current_thread_core_test.cpp
-    mem_tracker_test.cpp
-    mem_pool_test.cpp
-    runtime_state_core_test.cpp
-    memory/mem_chunk_allocator_test.cpp
-    memory/system_allocator_test.cpp
-    memory/memory_resource_test.cpp
-    memory/counting_allocator_test.cpp
+    function_context_core_test.cpp
 )
 
-set(RUNTIME_CORE_TEST_LINK_LIBS
+set(EXPR_CORE_TEST_LINK_LIBS
+    ExprCore
     RuntimeCore
     ChunkCore
     ColumnCore
@@ -42,8 +36,9 @@ set(RUNTIME_CORE_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_library(starrocks_runtime_core_test_objs OBJECT ${RUNTIME_CORE_TEST_FILES})
-target_link_libraries(starrocks_runtime_core_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_runtime_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(runtime_core_test $<TARGET_OBJECTS:starrocks_runtime_core_test_objs>)
-target_link_libraries(runtime_core_test ${RUNTIME_CORE_TEST_LINK_LIBS} gtest_main)
+add_library(starrocks_expr_core_test_objs OBJECT ${EXPR_CORE_TEST_FILES})
+target_link_libraries(starrocks_expr_core_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_expr_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(expr_core_test $<TARGET_OBJECTS:starrocks_expr_core_test_objs>)
+target_link_libraries(expr_core_test ${EXPR_CORE_TEST_LINK_LIBS} gtest_main)
+

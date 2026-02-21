@@ -13,6 +13,17 @@
 // limitations under the License.
 
 #pragma once
-#include <cctz/time_zone.h>
 
-#include "types/timestamp_value.h"
+#include <string>
+#include <vector>
+
+namespace starrocks {
+
+struct NgramBloomFilterState {
+    bool initialized = false;
+    // whether this index can be used for predicate or not
+    bool index_useful = false;
+    std::vector<std::string> ngram_set;
+};
+
+} // namespace starrocks
