@@ -12,16 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/global_variables.h"
+#pragma once
+
+#include "common/object_pool.h"
+#include "common/status.h"
 
 namespace starrocks {
 
-bool GlobalVariables::_is_init = false;
+class Expr;
+class ExprContext;
+class RuntimeState;
 
-GlobalVariables::GlobalVariables() {
-    _one_size_not_null_column = NullColumn::create(1, 0);
-    _one_size_null_column = NullColumn::create(1, 1);
-    _is_init = true;
-}
+class ExprJITPass {
+public:
+    static Status rewrite_root(Expr** root, ObjectPool* pool, RuntimeState* state);
+    static Status rewrite_context(ExprContext* context, ObjectPool* pool);
+};
 
 } // namespace starrocks
