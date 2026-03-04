@@ -39,7 +39,6 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/in_const_predicate.hpp"
-#include "exprs/runtime_filter.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
@@ -51,11 +50,12 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter/runtime_filter_helper.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/type_descriptor.h"
 #include "types/variant.h"
-#include "util/variant_encoder.h"
 
 namespace starrocks::parquet {
 

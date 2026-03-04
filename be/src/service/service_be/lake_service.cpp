@@ -370,11 +370,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                             prealloc_metadata->CopyFrom(*metadata);
                         }
                     } else {
-                        g_publish_version_failed_tasks << 1;
                         if (res.status().is_resource_busy()) {
                             VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_info=" << tablet_info
                                     << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
                         } else {
+                            g_publish_version_failed_tasks << 1;
                             LOG(WARNING) << "Fail to publish version: " << res.status()
                                          << ". tablet_info=" << tablet_info
                                          << " txn_ids=" << JoinMapped(txns, txn_info_string, ",")
@@ -461,12 +461,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 }
                             }
                         } else {
-                            g_publish_version_failed_tasks << 1;
                             if (res.is_resource_busy()) {
                                 VLOG(2) << "Failed to publish resharding tablet: " << res
                                         << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
                                         << " txn=" << txn_info.DebugString() << " version=" << new_version;
                             } else {
+                                g_publish_version_failed_tasks << 1;
                                 LOG(WARNING) << "Failed to publish resharding tablet: " << res
                                              << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
                                              << " txn=" << txn_info.DebugString() << " version=" << new_version;
@@ -1494,6 +1494,57 @@ void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* contro
     auto st = scheduler->abort(request->txn_id());
     TEST_SYNC_POINT("LakeServiceImpl::abort_compaction:aborted");
     st.to_protobuf(response->mutable_status());
+}
+
+void LakeServiceImpl::drop_tablet_cache(::google::protobuf::RpcController* controller,
+                                        const ::starrocks::DropTabletCacheRequest* request,
+                                        ::starrocks::DropTabletCacheResponse* response,
+                                        ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablets_size() == 0) {
+        cntl->SetFailed("missing tablets");
+        return;
+    }
+
+    auto thread_pool = delete_tablet_thread_pool(_env);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("no thread pool to run task");
+        return;
+    }
+    Status::OK().to_protobuf(response->mutable_status());
+    auto latch = BThreadCountDownLatch(request->tablets_size());
+    bthread::Mutex response_mtx;
+    for (auto& tablet : request->tablets()) {
+        int64_t tablet_id = tablet.tablet_id();
+        int64_t version = tablet.version();
+        auto task = std::make_shared<CancellableRunnable>(
+                [&, tablet_id, version] {
+                    DeferOp defer([&] { latch.count_down(); });
+                    auto st = lake::drop_tablet_cache(_tablet_mgr, tablet_id, version);
+                    if (!st.ok()) {
+                        std::lock_guard l(response_mtx);
+                        st.to_protobuf(response->mutable_status());
+                    }
+                },
+                [&] {
+                    Status st = Status::Cancelled("drop tablet cache task has been cancelled");
+                    LOG(WARNING) << st;
+                    std::lock_guard l(response_mtx);
+                    st.to_protobuf(response->mutable_status());
+                    latch.count_down();
+                });
+        auto st = thread_pool->submit(std::move(task));
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit drop tablet cache task: " << st;
+            std::lock_guard l(response_mtx);
+            st.to_protobuf(response->mutable_status());
+            latch.count_down();
+        }
+    }
+
+    latch.wait();
 }
 
 void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, const ::starrocks::VacuumRequest* request,

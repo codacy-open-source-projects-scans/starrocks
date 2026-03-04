@@ -29,6 +29,8 @@ ADD_BE_LIB(Base
   debug/trace_metrics.cpp
   coding.cpp
   gc/gc_helper.cpp
+  memory/jemalloc_allocator.cpp
+  memory/malloc_allocator.cpp
   network/network_util.cpp
   network/cidr.cpp
   gc/gc_helper_smoothstep.cpp
@@ -56,6 +58,7 @@ ADD_BE_LIB(Base
   string/faststring.cc
   string/string_util.cpp
   string/string_parser.cpp
+  string/url_parser.cpp
   string/slice.cpp
   string/utf8_check.cpp
   system/errno.cpp

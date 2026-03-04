@@ -55,6 +55,7 @@ set(EXEC_FILES
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/workgroup/pipeline_executor_set_test.cpp
+        ./exec/workgroup/pipeline_executor_set_manager_test.cpp
         ./exec/workgroup/work_group_manager_test.cpp
         ./exec/workgroup/mem_tracker_manager_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
@@ -322,7 +323,6 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/download_util_test.cpp
         ./util/stack_util_test.cpp
-        ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         service/backend_base_test.cpp

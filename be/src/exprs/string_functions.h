@@ -21,13 +21,13 @@
 #include <iomanip>
 
 #include "base/phmap/phmap.h"
+#include "base/string/url_parser.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "common/constexpr.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "runtime/current_thread.h"
-#include "util/url_parser.h"
 
 namespace starrocks {
 class RegexpSplit;
@@ -651,6 +651,15 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(format_bytes);
+
+    /**
+     * Raises a runtime error with the given message.
+     *
+     * @param: [message]
+     * @paramType: [StringColumn]
+     * @return: BooleanColumn (never returned for non-null input; always throws)
+     */
+    DEFINE_VECTORIZED_FN(raise_error);
 
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status ngram_search_case_insensitive_prepare(FunctionContext* context,

@@ -309,6 +309,9 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean enable_profile_log = true;
+    @ConfField(mutable = true, comment = "Minimum query latency (ms) to log a profile to fe.profile.log. " +
+            "Only queries with latency >= this value are logged. 0 means log all profiles (no threshold).")
+    public static long profile_log_latency_threshold_ms = 0;
     @ConfField
     public static String profile_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
@@ -3513,6 +3516,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_experimental_temporary_table = true;
 
+    /**
+     * Enable pre-resolution of external tables (JDBC, Iceberg, etc.) before acquiring internal table locks.
+     * This avoids holding meta lock while fetching external metadata via RPC.
+     * Set to false to fallback to the original behavior if issues occur.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_external_table_preparse = true;
+
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
 
@@ -3926,6 +3937,14 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int lake_remove_table_thread_num = 4;
+
+    /**
+     * Enable dropping tablet data cache before removing a table or partition in shared-data mode.
+     * This helps to free up cache space proactively when data is being deleted.
+     * Default: true
+     */
+    @ConfField(mutable = true)
+    public static boolean lake_enable_drop_tablet_cache = true;
 
     @ConfField(mutable = true)
     public static int merge_commit_gc_check_interval_ms = 60000;
