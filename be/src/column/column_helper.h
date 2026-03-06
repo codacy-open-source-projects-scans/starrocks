@@ -570,6 +570,10 @@ public:
             return reinterpret_cast<const ColumnType*>(column);
         }
     }
+    template <LogicalType LT>
+    static const RunTimeColumnType<LT>* get_data_column_by_type(const ColumnPtr& column) {
+        return get_data_column_by_type<LT>(column.get());
+    }
 
     static const NullColumn* get_null_column(const Column* column) {
         if (column->only_null()) {
@@ -595,12 +599,17 @@ public:
             return column;
         }
     }
+    static const Column* get_data_column(const ColumnPtr& column) { return get_data_column(column.get()); }
 
     static BinaryColumn* get_binary_column(Column* column) { return down_cast<BinaryColumn*>(get_data_column(column)); }
 
     static const BinaryColumn* get_binary_column(const Column* column) {
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
+
+    // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
+    // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
+    static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
 
     static bool is_all_const(const Columns& columns);
 
