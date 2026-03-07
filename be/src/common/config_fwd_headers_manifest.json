@@ -1,0 +1,78 @@
+{
+  "generated_headers": [
+    {
+      "path": "be/src/common/config_cow_fwd.h",
+      "configs": [
+        "enable_cow_optimization",
+        "cow_optimization_diagnose_level"
+      ]
+    },
+    {
+      "path": "be/src/common/config_exec_fwd.h",
+      "configs": [
+        "vector_chunk_size"
+      ]
+    },
+    {
+      "path": "be/src/common/config_path_fwd.h",
+      "configs": [
+        "local_library_dir",
+        "plugin_path",
+        "query_scratch_dirs",
+        "pprof_profile_dir",
+        "small_file_dir",
+        "pull_load_task_dir",
+        "sys_log_dir",
+        "user_function_dir"
+      ]
+    },
+    {
+      "path": "be/src/common/config_storage_fwd.h",
+      "configs": [
+        "storage_root_path",
+        "disable_storage_page_cache",
+        "enable_event_based_compaction_framework",
+        "enable_pk_size_tiered_compaction_strategy",
+        "storage_flood_stage_left_capacity_bytes",
+        "spill_local_storage_dir",
+        "l0_snapshot_size"
+      ]
+    },
+    {
+      "path": "be/src/common/config_cache_fwd.h",
+      "configs": [
+        "datacache_enable"
+      ]
+    },
+    {
+      "path": "be/src/common/config_metrics_fwd.h",
+      "configs": [
+        "enable_metric_calculator",
+        "enable_system_metrics",
+        "enable_table_metrics",
+        "max_table_metrics_num"
+      ]
+    },
+    {
+      "path": "be/src/common/config_rpc_client_fwd.h",
+      "configs": [
+        "brpc_connection_type",
+        "rpc_connect_timeout_ms",
+        "thrift_rpc_timeout_ms",
+        "thrift_rpc_connection_max_valid_time_ms",
+        "broker_write_timeout_seconds"
+      ]
+    },
+    {
+      "path": "be/src/common/config_scan_io_fwd.h",
+      "configs": [
+        "io_coalesce_read_max_buffer_size",
+        "io_coalesce_read_max_distance_size",
+        "max_pushdown_conditions_per_column",
+        "max_scan_key_num",
+        "avro_reader_buffer_size_bytes",
+        "enable_check_string_lengths"
+      ]
+    }
+  ]
+}
