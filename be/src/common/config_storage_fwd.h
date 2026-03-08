@@ -38,4 +38,7 @@ CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 // if l0_mem_size exceeds this value, l0 need snapshot
 CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 
+// Maximum number of log entries to keep in memory buffer (per CN/BE)
+CONF_mInt32(tablet_write_log_buffer_size, "100000");
+
 } // namespace starrocks::config
