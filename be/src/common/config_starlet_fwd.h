@@ -33,6 +33,10 @@ CONF_mDouble(starlet_cache_evict_low_water, "0.1");
 // Only support in S3/HDFS currently.
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 
+CONF_mBool(starlet_use_star_cache, "true");
+
+CONF_Int32(starlet_star_cache_disk_size_percent, "80");
+
 CONF_mBool(starlet_write_file_with_tag, "false");
 
 #endif
