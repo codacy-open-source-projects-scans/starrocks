@@ -43,8 +43,7 @@
 #include "base/string/parse_util.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
-#include "common/config.h"
-#include "common/configbase.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/logging.h"
 #include "common/mem_chunk.h"
 #include "common/process_exit.h"
@@ -104,6 +103,7 @@
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
@@ -118,6 +118,10 @@
 #endif
 
 namespace starrocks {
+
+int64_t GlobalEnv::process_mem_limit() const {
+    return _process_mem_tracker->limit();
+}
 
 // Calculate the total memory limit of all load tasks on this BE
 static int64_t calc_max_load_memory(int64_t process_mem_limit) {

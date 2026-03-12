@@ -1279,6 +1279,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Specifies whether to enable parallel memtable finalize when loading data to lake tables (shared-data mode). When enabled, the memtable finalize operation (sort/aggregate) is moved from the write thread to the flush thread, allowing the write thread to continue inserting data into a new memtable while the previous one is being finalized and flushed in parallel. This can significantly improve load throughput by overlapping CPU-intensive finalize operations with I/O-bound flush operations. Note that this optimization is automatically disabled when auto-increment columns need to be filled, as auto-increment ID assignment must happen before the memtable is submitted for flush.
 - Introduced in: -
 
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether to allow object-storage LIST fallback when lake metadata cache misses during random bucketing size checks. `true` means fallback to LIST metadata files to compute base size (historical behavior, more accurate size estimation). `false` means skip LIST and use `base_size = 0`, which reduces LIST object requests but may delay immutable marking due to less accurate size estimation.
+- Introduced in: 4.1.0, 4.0.7, 3.5.15
+
 ##### enable_stream_load_verbose_log
 
 - Default: false
@@ -2827,6 +2836,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: Seconds
 - Is mutable: 是
 - Description: The time interval at which Tablet Stat Cache updates.
+- Introduced in: -
+
+##### lake_enable_accurate_pk_row_count
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use accurate row counts for lake primary-key tablets. When enabled, StarRocks reads each rowset's delete vector from object storage and subtracts deleted rows, producing more accurate stats but potentially increasing `get_tablet_stats` RPC overhead. When disabled, StarRocks uses the approximate `num_dels` value in rowset metadata to avoid remote I/O, which may slightly overcount rows that were deleted but not yet compacted.
+- Introduced in: -
+
+##### lake_tablet_stat_slow_log_ms
+
+- Default: 300000
+- Type: Int64
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Threshold (in milliseconds) for logging slow tablet-stat collection tasks. If a single tablet stat task exceeds this value, StarRocks emits a warning log with diagnostics such as `tablet_id`, version, rowset count, accurate mode, and elapsed time.
 - Introduced in: -
 
 ##### tablet_writer_open_rpc_timeout_sec

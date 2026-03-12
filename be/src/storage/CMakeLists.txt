@@ -78,6 +78,7 @@ set(STORAGE_FILES
     rowset/json_column_compactor.cpp
     rowset/json_column_iterator.cpp
     rowset/json_column_writer.cpp
+    rowset/object_column_writer.cpp
     rowset/cast_column_iterator.cpp
     rowset/column_reader.cpp
     rowset/column_writer.cpp
@@ -178,6 +179,7 @@ set(STORAGE_FILES
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
     virtual_column_utils.cpp
+    extends_column_utils.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
