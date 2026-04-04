@@ -15,9 +15,7 @@
 #include "exec/runtime_filter/runtime_filter_probe.h"
 
 #include <algorithm>
-#include <chrono>
 #include <sstream>
-#include <thread>
 
 #include "base/simd/simd.h"
 #include "base/time/time.h"
@@ -52,7 +50,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         }
     }
 
-    WithLayoutMixin::init(desc);
+    init_runtime_filter_layout(desc, &_layout);
 
     if (desc.__isset.plan_node_id_to_partition_by_exprs) {
         const auto& it = const_cast<TRuntimeFilterDescription&>(desc).plan_node_id_to_partition_by_exprs.find(node_id);
