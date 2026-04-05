@@ -132,8 +132,9 @@ void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state, Ru
 void ExecNode::register_runtime_filter_descriptor(RuntimeState* state, RuntimeFilterProbeDescriptor* rf_desc) {
     rf_desc->set_probe_plan_node_id(_id);
     _runtime_filter_collector.add_descriptor(rf_desc);
-    ExecEnv::GetInstance()->add_rf_event({state->query_id(), rf_desc->filter_id(), BackendOptions::get_localhost(),
-                                          strings::Substitute("REGISTER_GRF(probe_node_id=$0", _id)});
+    ExecEnv::GetInstance()->runtime_filter_cache()->add_rf_event(
+            {state->query_id(), rf_desc->filter_id(), BackendOptions::get_localhost(),
+             strings::Substitute("REGISTER_GRF(probe_node_id=$0", _id)});
     state->runtime_filter_registry()->register_descriptor(rf_desc);
 }
 
@@ -151,6 +152,9 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
     }
     if (state != nullptr && state->query_options().__isset.runtime_filter_scan_wait_time_ms) {
         _runtime_filter_collector.set_scan_wait_timeout_ms(state->query_options().runtime_filter_scan_wait_time_ms);
+    }
+    if (state != nullptr && state->exec_env() != nullptr) {
+        _runtime_filter_collector.set_runtime_filter_cache(state->exec_env()->runtime_filter_cache());
     }
     if (tnode.__isset.filter_null_value_columns) {
         _filter_null_value_columns = tnode.filter_null_value_columns;
