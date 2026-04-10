@@ -187,7 +187,7 @@ CANCEL COMPACTION WHERE TXN_ID = 123;
 
 ### Manual Compaction
 
-From v3.1, StarRocks offers a SQL statement for manual Compaction. You can specify the table or partitions for compaction. For more information, refer to [Manual Compaction](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#manual-compaction).
+From v3.1, StarRocks offers a SQL statement for manual Compaction. You can specify the table or partitions for compaction. For more information, refer to [Manual Compaction](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#manual-compaction).
 
 ## Primary Key tables
 
@@ -226,7 +226,7 @@ SSB 1TB dataset
 
 :::note
 
-The dataset and queries used in this comparison are from the [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md#test-sql-and-table-creation-statements).
+The dataset and queries used in this comparison are from the [Star Schema Benchmark](../benchmarking/SSB_Benchmarking.md).
 
 :::
 
@@ -262,4 +262,3 @@ The following table shows the performance test results on thirteen queries and t
 - Hybrid row-column storage
 - Global dictionary object
 - Backup and restore
-

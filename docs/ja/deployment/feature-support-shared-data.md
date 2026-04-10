@@ -186,7 +186,7 @@ CANCEL COMPACTION WHERE TXN_ID = 123;
 
 ### 手動 Compaction
 
-v3.1 から、StarRocks は手動 Compaction のための SQL ステートメントを提供しています。Compaction のためにテーブルまたはパーティションを指定できます。詳細については、[Manual Compaction](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#manual-compaction) を参照してください。
+v3.1 から、StarRocks は手動 Compaction のための SQL ステートメントを提供しています。Compaction のためにテーブルまたはパーティションを指定できます。詳細については、[Manual Compaction](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#手動コンパクション) を参照してください。
 
 ## 主キーテーブル
 
@@ -225,7 +225,7 @@ SSB 1TB データセット
 
 :::note
 
-この比較に使用されたデータセットとクエリは、[Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md#test-sql-and-table-creation-statements) からのものです。
+この比較に使用されたデータセットとクエリは、[Star Schema Benchmark](../benchmarking/SSB_Benchmarking.md) からのものです。
 
 :::
 
