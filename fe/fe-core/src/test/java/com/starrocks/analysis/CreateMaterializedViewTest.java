@@ -30,6 +30,7 @@ import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -58,6 +59,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -70,7 +72,6 @@ import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
@@ -2922,13 +2923,12 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n";
         AnalysisException exception = Assertions.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-        Assertions.assertTrue(exception.getMessage().contains(
-                "Legacy REFRESH INCREMENTAL materialized views are no longer supported"));
+        Assertions.assertTrue(exception.getMessage().contains("Getting syntax error"));
     }
 
     @Test
-    public void testInjectedLegacyIncrementalCreateRejectedBeforePersistence() throws Exception {
-        String mvName = "legacy_incremental_create_guard_mv";
+    public void testInjectedUnsupportedRefreshSchemeCreateRejectedBeforePersistence() throws Exception {
+        String mvName = "unsupported_refresh_scheme_create_guard_mv";
         String sql = "create materialized view test." + mvName + "\n" +
                 "distributed by hash(k2) buckets 3\n" +
                 "refresh manual\n" +
@@ -2936,13 +2936,12 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            stmt.setRefreshSchemeDesc(new IncrementalRefreshSchemeDesc(
-                    stmt.getRefreshSchemeDesc().getMoment(), NodePosition.ZERO));
+            stmt.setRefreshSchemeDesc(new RefreshSchemeClause(NodePosition.ZERO,
+                    stmt.getRefreshSchemeDesc().getMoment()));
 
             DdlException exception = Assertions.assertThrows(DdlException.class,
                     () -> currentState.getLocalMetastore().createMaterializedView(stmt));
-            Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
-                    exception.getMessage());
+            Assertions.assertEquals("Unsupported refresh scheme type", exception.getMessage());
             Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName));
         } finally {
             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName) != null) {
@@ -2972,6 +2971,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(),
                             "async_mv_1");
+            Assertions.assertFalse(mv.getRefreshScheme().isIncremental());
+            Method getJob = MaterializedViewMgr.class.getDeclaredMethod("getJob", MvId.class);
+            getJob.setAccessible(true);
+            Assertions.assertNull(getJob.invoke(GlobalStateMgr.getCurrentState().getMaterializedViewMgr(), mv.getMvId()));
             Assertions.assertTrue(mv.getFullSchema().get(0).isKey());
             Assertions.assertFalse(mv.getFullSchema().get(1).isKey());
         } catch (Exception e) {

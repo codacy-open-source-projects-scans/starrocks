@@ -59,6 +59,7 @@ set(EXEC_FILES
         ./exec/pipeline/schedule/observer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
+        ./exec/pipeline/multi_level_concurrent_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
@@ -453,6 +454,7 @@ SET(DW_TEST_FILES
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
+    ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp

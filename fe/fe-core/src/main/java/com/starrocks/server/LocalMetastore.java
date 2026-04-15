@@ -214,7 +214,6 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HintNode;
-import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -3146,9 +3145,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeClause refreshSchemeDesc = stmt.getRefreshSchemeDesc();
-        if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
-            throwLegacyIncrementalMaintenanceUnsupported();
-        }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
@@ -3217,8 +3213,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedViewRefreshType.MANUAL);
         } else {
-            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            mvRefreshScheme.setType(MaterializedViewRefreshType.INCREMENTAL);
+            throw new DdlException("Unsupported refresh scheme type");
         }
 
         if (refreshSchemeDesc.getMoment() == RefreshSchemeClause.RefreshMoment.IMMEDIATE) {
@@ -3233,21 +3228,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         MaterializedView materializedView;
         if (RunMode.isSharedNothingMode()) {
-            if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
-                materializedView = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
-                        .createSinkTable(stmt, partitionInfo, mvId, db.getId());
-                materializedView.setMaintenancePlan(stmt.getMaintenancePlan());
-            } else {
-                materializedView =
-                        new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
-                                baseDistribution, mvRefreshScheme);
-            }
+            materializedView =
+                    new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
+                            baseDistribution, mvRefreshScheme);
         } else {
             Preconditions.checkState(RunMode.isSharedDataMode());
-            if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
-                throw new DdlException("Incremental materialized view in shared_data mode is not supported");
-            }
-
             materializedView =
                     new LakeMaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
                             baseDistribution, mvRefreshScheme);
@@ -3344,8 +3329,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (StringUtils.isNotEmpty(colocateGroup)) {
                 colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup, true /* expectLakeTable */);
             }
-
-            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().prepareMaintenanceWork(stmt, materializedView);
 
             String storageVolumeId = "";
             if (materializedView.isCloudNativeMaterializedView()) {
