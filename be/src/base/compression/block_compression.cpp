@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/compression/block_compression.h"
+#include "base/compression/block_compression.h"
 
 #ifdef __x86_64__
 #include <libdeflate.h>
@@ -40,14 +40,12 @@
 #include <zlib.h>
 
 #include "base/coding.h"
+#include "base/compression/compression_context_pool_singletons.h"
+#include "base/compression/compression_headers.h"
+#include "base/compression/lzo_decompressor_registry.h"
 #include "base/string/faststring.h"
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
-#include "util/compression/compression_context_pool_singletons.h"
-#include "util/compression/compression_headers.h"
-namespace orc {
-uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
-} // namespace orc
 
 namespace starrocks {
 
@@ -1092,14 +1090,13 @@ public:
             if (input_size < block_size) {
                 return Status::InternalError("LzoBlockCompression decompress failed: input data not enough");
             }
-            try {
-                uint64_t read = orc::lzoDecompress(input_data, input_data + block_size, output_data, output_limit);
-                DCHECK(read <= uncompressed_size);
-                uncompressed_size -= read;
-                output_data += read;
-            } catch (const std::runtime_error& e) {
+            ASSIGN_OR_RETURN(size_t read, compression::lzo_decompress(input_data, input_data + block_size, output_data,
+                                                                      output_limit));
+            if (read > uncompressed_size) {
                 return Status::InternalError("LzoBlockCompression decompress failed: data corruption");
             }
+            uncompressed_size -= read;
+            output_data += read;
 
             input_data += block_size;
             input_size -= block_size;
